@@ -12,18 +12,16 @@ import {
   X
 } from 'lucide-react';
 import L from 'leaflet';
-import type { GeoPoint, AppUser, DriveSession, EnvironmentType, DriveEnvironment } from '../types';
+import type { GeoPoint, DriveSession, EnvironmentType, DriveEnvironment } from '../types';
 import { classifyEnvironment, calculateDistanceKm, ENVIRONMENT_CONFIG } from '../services/environmentClassifier';
-import { saveDriveSession } from '../services/db';
+import { saveLocalDrive } from '../services/localDb';
 
 interface DriveTrackerProps {
-  currentUser: AppUser | null;
   onDriveSaved: (drive: DriveSession) => void;
   onOpenManualEntry: () => void;
 }
 
 export const DriveTracker: React.FC<DriveTrackerProps> = ({
-  currentUser,
   onDriveSaved,
   onOpenManualEntry,
 }) => {
@@ -332,13 +330,10 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
 
   // Tallennetaan ajokerta
   const handleConfirmSave = async () => {
-    if (!finalDriveData || !currentUser) return;
+    if (!finalDriveData) return;
 
     const newDrive: DriveSession = {
       id: 'drive-' + Date.now(),
-      studentId: currentUser.uid,
-      studentName: currentUser.displayName || 'Oppilas',
-      studentEmail: currentUser.email || '',
       startTime: finalDriveData.startTime.toISOString(),
       endTime: finalDriveData.endTime.toISOString(),
       durationSeconds: finalDriveData.durationSeconds,
@@ -352,11 +347,11 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
       },
       routePoints: finalDriveData.points,
       notes: saveNotes,
-      approvedByTeacher: currentUser.role === 'admin', // Jos opettaja ajaa itse tai tallentaa, kuittaus suoraan
+      studentName: 'Opetuslupaoppilas',
       createdAt: new Date().toISOString(),
     };
 
-    await saveDriveSession(newDrive);
+    saveLocalDrive(newDrive);
     onDriveSaved(newDrive);
     setShowSaveModal(false);
     setSaveNotes('');

@@ -4,23 +4,19 @@ import { StatsOverview } from './components/StatsOverview';
 import { DriveTracker } from './components/DriveTracker';
 import { DriveTable } from './components/DriveTable';
 import { DriveMapModal } from './components/DriveMapModal';
-import { AdminPanelModal } from './components/AdminPanelModal';
 import { ManualDriveModal } from './components/ManualDriveModal';
-import { FirebaseSettingsModal } from './components/FirebaseSettingsModal';
-import type { AppUser, DriveSession, OverallStats } from './types';
-import { subscribeToAuth, loginAsDemoUser } from './services/auth';
-import { getDriveSessions, calculateOverallStats } from './services/db';
-import { isFirebaseConfigured, SUPERADMIN_EMAIL } from './services/firebase';
-import { Sparkles, Car } from 'lucide-react';
+import type { DriveSession, OverallStats } from './types';
+import { getLocalDrives, calculateOverallStats } from './services/localDb';
+import { exportDrivesToPdf, exportElementToPng } from './services/exportService';
+import { backupToGoogleDrive, restoreFromBackupFile } from './services/driveBackup';
+import { Car, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export function App() {
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [drives, setDrives] = useState<DriveSession[]>([]);
   const [stats, setStats] = useState<OverallStats>({
     totalDrives: 0,
     totalDurationSeconds: 0,
     totalDistanceKm: 0,
-    approvedDrives: 0,
     byEnvironment: {
       maantie: { count: 0, durationSeconds: 0, distanceKm: 0 },
       taajama: { count: 0, durationSeconds: 0, distanceKm: 0 },
@@ -29,90 +25,107 @@ export function App() {
     },
   });
 
-  // Valitun oppilaan suodatus (Opettajanäkymä)
-  const [selectedStudent, setSelectedStudent] = useState<AppUser | null>(null);
-
-  // Modalien tilat
   const [selectedDriveForMap, setSelectedDriveForMap] = useState<DriveSession | null>(null);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingPng, setIsExportingPng] = useState(false);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Kuuntele kirjautumisen tilaa
-  useEffect(() => {
-    const unsubscribe = subscribeToAuth((user) => {
-      // Jos ei kirjautunutta käyttäjää eikä Firebasea, alustetaan oletuksena opettaja atjarvela@gmail.com
-      if (!user && !isFirebaseConfigured) {
-        const defaultUser = loginAsDemoUser(SUPERADMIN_EMAIL);
-        setCurrentUser(defaultUser);
-      } else {
-        setCurrentUser(user);
-      }
-    });
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
-    return () => unsubscribe();
-  }, []);
-
-  // Lataa ajokerrat kun käyttäjä tai oppilassuodatin muuttuu
-  const refreshDrives = async () => {
-    if (!currentUser) return;
-    const studentFilterId = selectedStudent ? selectedStudent.uid : undefined;
-    const data = await getDriveSessions(currentUser, studentFilterId);
-    setDrives(data);
-    setStats(calculateOverallStats(data));
+  const refreshDrives = () => {
+    const list = getLocalDrives();
+    setDrives(list);
+    setStats(calculateOverallStats(list));
   };
 
   useEffect(() => {
     refreshDrives();
-  }, [currentUser, selectedStudent]);
+  }, []);
 
-  const handleDriveSaved = () => {
-    refreshDrives();
+  const handleExportPdf = async () => {
+    try {
+      setIsExportingPdf(true);
+      await exportDrivesToPdf(drives, stats);
+      showToast('PDF-ajopäiväkirja luotu onnistuneesti!');
+    } catch (e: any) {
+      console.error(e);
+      showToast('PDF-luonti epäonnistui: ' + e.message, 'error');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleExportPng = async () => {
+    try {
+      setIsExportingPng(true);
+      await exportElementToPng('driving-log-table-container', 'ajopaivakirja');
+      showToast('Ajopäiväkirjan kuva (PNG) luotu onnistuneesti!');
+    } catch (e: any) {
+      console.error(e);
+      showToast('PNG-luonti epäonnistui: ' + e.message, 'error');
+    } finally {
+      setIsExportingPng(false);
+    }
+  };
+
+  const handleBackupDrive = async () => {
+    try {
+      await backupToGoogleDrive(drives);
+      showToast('Valitse "Tallenna Google Driveen" avautuvasta jakovalikosta!');
+    } catch (e: any) {
+      console.error(e);
+      showToast('Varmuuskopiointi epäonnistui: ' + e.message, 'error');
+    }
+  };
+
+  const handleRestoreDrive = async (file: File) => {
+    const res = await restoreFromBackupFile(file);
+    if (res.success) {
+      refreshDrives();
+      showToast(`Palautettiin onnistuneesti ${res.count} ajokertaa!`);
+    } else {
+      showToast(res.error || 'Palautus epäonnistui.', 'error');
+    }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased transition-colors">
       
-      {/* Yläpalkki */}
+      {/* Yläpalkki (Puhdas Android-opettajanäkymä) */}
       <Navbar
-        currentUser={currentUser}
-        onOpenSettings={() => setShowSettingsModal(true)}
-        onOpenAdminPanel={() => setShowAdminPanel(true)}
-        selectedStudentName={selectedStudent?.displayName || selectedStudent?.email || undefined}
-        onClearStudentFilter={() => setSelectedStudent(null)}
+        onExportPdf={handleExportPdf}
+        onExportPng={handleExportPng}
+        onBackupDrive={handleBackupDrive}
+        onRestoreDrive={handleRestoreDrive}
+        isExportingPdf={isExportingPdf}
+        isExportingPng={isExportingPng}
       />
+
+      {/* Ilmoitusviesti / Toast */}
+      {notification && (
+        <div className="fixed top-20 right-4 z-50 animate-in fade-in slide-in-from-top-3 duration-200">
+          <div className={`p-3.5 rounded-2xl shadow-xl border flex items-center space-x-2 text-xs sm:text-sm font-semibold ${
+            notification.type === 'success'
+              ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-600/20'
+              : 'bg-rose-600 text-white border-rose-500 shadow-rose-600/20'
+          }`}>
+            {notification.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 shrink-0" />
+            )}
+            <span>{notification.message}</span>
+          </div>
+        </div>
+      )}
 
       {/* Pääsisältö */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
         
-        {/* Tervetuloa- ja infobanneri */}
-        {!isFirebaseConfigured && (
-          <div className="no-print p-4 rounded-2xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-200/80 dark:border-blue-900/50 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center space-x-3">
-              <div className="p-2.5 rounded-xl bg-blue-600 text-white shrink-0 shadow-xs">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div className="text-xs sm:text-sm">
-                <p className="font-semibold text-slate-900 dark:text-white">
-                  Opetuslupaportaali on valmiina käyttöön!
-                </p>
-                <p className="text-slate-600 dark:text-slate-300 text-xs">
-                  Pääkäyttäjänä: <strong className="text-indigo-600 dark:text-indigo-400">{SUPERADMIN_EMAIL}</strong>. Voit testata GPS-ajoa simulaattorilla, seurata ajoympäristön tunnistusta ja kuitata ajokertoja hyväksytyksi.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2 text-xs">
-              <button
-                onClick={() => setShowSettingsModal(true)}
-                className="px-3 py-1.5 rounded-xl font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 transition shadow-2xs"
-              >
-                Kytke Firebase
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Yhteenvetokortit ja ajoympäristöjakauma */}
         <section>
           <StatsOverview stats={stats} />
@@ -121,8 +134,7 @@ export function App() {
         {/* Ajotila ja Reaaliaikainen GPS-seuranta */}
         <section className="no-print">
           <DriveTracker
-            currentUser={currentUser}
-            onDriveSaved={handleDriveSaved}
+            onDriveSaved={refreshDrives}
             onOpenManualEntry={() => setShowManualModal(true)}
           />
         </section>
@@ -131,9 +143,10 @@ export function App() {
         <section>
           <DriveTable
             drives={drives}
-            currentUser={currentUser}
             onSelectDrive={(drive) => setSelectedDriveForMap(drive)}
             onRefresh={refreshDrives}
+            onExportPdf={handleExportPdf}
+            onExportPng={handleExportPng}
           />
         </section>
 
@@ -146,10 +159,10 @@ export function App() {
             <Car className="w-4 h-4 text-blue-600" />
             <span className="font-semibold text-slate-700 dark:text-slate-300">Opetuslupa Ajopäiväkirja</span>
             <span>•</span>
-            <span>Pääkäyttäjä {SUPERADMIN_EMAIL}</span>
+            <span>Puhdas paikallinen Android-sovellus</span>
           </div>
           <div>
-            Täyttää Traficomin ja Ajovarman opetuslupavaatimukset ajokertojen ja ajoympäristöjen erittelyyn.
+            Kaikki ajotiedot säilyvät puhelimessasi. Varmuuskopioi säännöllisesti Google Driveen yläpalkin painikkeella.
           </div>
         </div>
       </footer>
@@ -157,28 +170,14 @@ export function App() {
       {/* Modaalit */}
       <DriveMapModal
         drive={selectedDriveForMap}
-        currentUser={currentUser}
         onClose={() => setSelectedDriveForMap(null)}
         onDriveUpdated={refreshDrives}
-      />
-
-      <AdminPanelModal
-        isOpen={showAdminPanel}
-        onClose={() => setShowAdminPanel(false)}
-        onSelectStudent={(student) => setSelectedStudent(student)}
-        selectedStudentId={selectedStudent?.uid}
       />
 
       <ManualDriveModal
         isOpen={showManualModal}
         onClose={() => setShowManualModal(false)}
-        currentUser={currentUser}
-        onDriveSaved={handleDriveSaved}
-      />
-
-      <FirebaseSettingsModal
-        isOpen={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
+        onDriveSaved={refreshDrives}
       />
 
     </div>

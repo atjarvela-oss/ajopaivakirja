@@ -1,15 +1,3 @@
-export type UserRole = 'admin' | 'student';
-
-export interface AppUser {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  photoURL: string | null;
-  role: UserRole;
-  createdAt?: string;
-  lastLoginAt?: string;
-}
-
 export type EnvironmentType = 'maantie' | 'taajama' | 'kaupunki' | 'pysakointi';
 
 export interface EnvironmentDistribution {
@@ -35,9 +23,6 @@ export interface DriveEnvironment {
 
 export interface DriveSession {
   id: string;
-  studentId: string;
-  studentName: string;
-  studentEmail: string;
   startTime: string; // ISO 8601
   endTime: string;   // ISO 8601
   durationSeconds: number;
@@ -47,34 +32,22 @@ export interface DriveSession {
   environment: DriveEnvironment;
   routePoints: GeoPoint[];
   notes: string;
-  approvedByTeacher: boolean;
-  teacherFeedback?: string;
-  approvedAt?: string;
-  approvedByEmail?: string;
+  studentName?: string;
+  teacherNotes?: string;
   createdAt: string;
-}
-
-export interface DriveFilter {
-  studentId?: string;
-  environment?: EnvironmentType | 'all';
-  startDate?: string;
-  endDate?: string;
-  searchQuery?: string;
 }
 
 export interface OverallStats {
   totalDrives: number;
   totalDurationSeconds: number;
   totalDistanceKm: number;
-  approvedDrives: number;
   byEnvironment: Record<EnvironmentType, { count: number; durationSeconds: number; distanceKm: number }>;
 }
 
-export interface FirebaseConfigState {
-  apiKey: string;
-  authDomain: string;
-  projectId: string;
-  storageBucket: string;
-  messagingSenderId: string;
-  appId: string;
+export interface BackupPayload {
+  version: string;
+  exportedAt: string;
+  appName: string;
+  totalDrives: number;
+  drives: DriveSession[];
 }

@@ -1,20 +1,18 @@
 import React, { useState } from 'react';
 import { X, PlusCircle } from 'lucide-react';
-import type { DriveSession, AppUser, EnvironmentType } from '../types';
+import type { DriveSession, EnvironmentType } from '../types';
 import { ENVIRONMENT_CONFIG } from '../services/environmentClassifier';
-import { saveDriveSession } from '../services/db';
+import { saveLocalDrive } from '../services/localDb';
 
 interface ManualDriveModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentUser: AppUser | null;
   onDriveSaved: (drive: DriveSession) => void;
 }
 
 export const ManualDriveModal: React.FC<ManualDriveModalProps> = ({
   isOpen,
   onClose,
-  currentUser,
   onDriveSaved,
 }) => {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -24,13 +22,13 @@ export const ManualDriveModal: React.FC<ManualDriveModalProps> = ({
   const [distanceKm, setDistanceKm] = useState('25');
   const [environment, setEnvironment] = useState<EnvironmentType>('taajama');
   const [notes, setNotes] = useState('');
+  const [teacherNotes, setTeacherNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser) return;
 
     try {
       setIsSaving(true);
@@ -39,7 +37,7 @@ export const ManualDriveModal: React.FC<ManualDriveModalProps> = ({
       
       let durationSeconds = Math.max(60, Math.round((endDateTime.getTime() - startDateTime.getTime()) / 1000));
       if (durationSeconds <= 0) {
-        durationSeconds = 45 * 60; // Oletus 45 min jos ajat väärinpäin
+        durationSeconds = 45 * 60;
       }
 
       const dist = parseFloat(distanceKm) || 0;
@@ -50,9 +48,6 @@ export const ManualDriveModal: React.FC<ManualDriveModalProps> = ({
 
       const newDrive: DriveSession = {
         id: 'manual-' + Date.now(),
-        studentId: currentUser.uid,
-        studentName: currentUser.displayName || 'Oppilas',
-        studentEmail: currentUser.email || '',
         startTime: startDateTime.toISOString(),
         endTime: endDateTime.toISOString(),
         durationSeconds,
@@ -66,11 +61,12 @@ export const ManualDriveModal: React.FC<ManualDriveModalProps> = ({
         },
         routePoints: [],
         notes,
-        approvedByTeacher: currentUser.role === 'admin',
+        teacherNotes,
+        studentName: 'Opetuslupaoppilas',
         createdAt: new Date().toISOString(),
       };
 
-      await saveDriveSession(newDrive);
+      saveLocalDrive(newDrive);
       onDriveSaved(newDrive);
       onClose();
     } catch (err) {
@@ -170,13 +166,26 @@ export const ManualDriveModal: React.FC<ManualDriveModalProps> = ({
 
           <div>
             <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Aiheet ja muistiinpanot
+              Aiheet ja harjoitteet
             </label>
             <textarea
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Esim. Kaupunkiajoa, pysäköintiruutuun peruutus..."
+              placeholder="Esim. Taajama-ajoa, kiertoliittymiä, taskupysäköinti..."
+              className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden"
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Opettajan huomiot / palaute (valinnainen)
+            </label>
+            <textarea
+              rows={2}
+              value={teacherNotes}
+              onChange={(e) => setTeacherNotes(e.target.value)}
+              placeholder="Opettajan palaute oppilaalle..."
               className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden"
             />
           </div>

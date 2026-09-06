@@ -1,35 +1,38 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { 
   X, 
-  CheckCircle2, 
-  Check
+  Check, 
+  Save
 } from 'lucide-react';
 import L from 'leaflet';
-import type { DriveSession, AppUser } from '../types';
+import type { DriveSession } from '../types';
 import { ENVIRONMENT_CONFIG } from '../services/environmentClassifier';
-import { approveDriveSession } from '../services/db';
+import { updateLocalDrive } from '../services/localDb';
 
 interface DriveMapModalProps {
   drive: DriveSession | null;
-  currentUser: AppUser | null;
   onClose: () => void;
   onDriveUpdated?: () => void;
 }
 
 export const DriveMapModal: React.FC<DriveMapModalProps> = ({
   drive,
-  currentUser,
   onClose,
   onDriveUpdated,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
 
-  const [isApproving, setIsApproving] = useState(false);
-  const [feedbackText, setFeedbackText] = useState(drive?.teacherFeedback || '');
-  const [approvedLocal, setApprovedLocal] = useState(drive?.approvedByTeacher || false);
+  const [notesText, setNotesText] = useState(drive?.notes || '');
+  const [teacherNotes, setTeacherNotes] = useState(drive?.teacherNotes || '');
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const isAdmin = currentUser?.role === 'admin';
+  useEffect(() => {
+    if (drive) {
+      setNotesText(drive.notes || '');
+      setTeacherNotes(drive.teacherNotes || '');
+    }
+  }, [drive]);
 
   useEffect(() => {
     if (!drive || !mapContainerRef.current) return;
@@ -91,19 +94,15 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
     };
   }, [drive]);
 
-  const handleApprove = async () => {
-    if (!drive || !currentUser) return;
-    setIsApproving(true);
-    try {
-      await approveDriveSession(drive.id, currentUser, feedbackText);
-      setApprovedLocal(true);
-      if (onDriveUpdated) onDriveUpdated();
-    } catch (e) {
-      console.error(e);
-      alert('Kuittaus epäonnistui.');
-    } finally {
-      setIsApproving(false);
-    }
+  const handleSaveNotes = () => {
+    if (!drive) return;
+    updateLocalDrive(drive.id, {
+      notes: notesText,
+      teacherNotes: teacherNotes,
+    });
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 2000);
+    if (onDriveUpdated) onDriveUpdated();
   };
 
   if (!drive) return null;
@@ -128,7 +127,7 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Oppilas: <strong>{drive.studentName}</strong> ({drive.studentEmail})
+              Opetusajokerta • {startDate.toLocaleDateString('fi-FI')}
             </p>
           </div>
 
@@ -217,63 +216,50 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
           </div>
 
           {/* Aiheet ja muistiinpanot */}
-          {drive.notes && (
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs">
-              <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                Oppilaan muistiinpanot / Aiheet:
-              </span>
-              <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
-                {drive.notes}
-              </p>
-            </div>
-          )}
-
-          {/* Opettajan kuittaus ja palaute */}
-          <div className={`p-4 rounded-xl border ${
-            approvedLocal 
-              ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' 
-              : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'
-          }`}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-2">
-                <CheckCircle2 className={`w-5 h-5 ${approvedLocal ? 'text-emerald-600' : 'text-amber-500'}`} />
-                <span className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-white">
-                  {approvedLocal ? 'Opettaja on kuitannut ajokerran hyväksytyksi' : 'Odottaa opettajan kuittausta'}
-                </span>
-              </div>
-              {drive.approvedByEmail && (
-                <span className="text-[11px] text-slate-500">
-                  Kuitannut: {drive.approvedByEmail}
-                </span>
-              )}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Aiheet ja oppilaan harjoitukset:
+              </label>
+              <textarea
+                value={notesText}
+                onChange={(e) => setNotesText(e.target.value)}
+                rows={2}
+                placeholder="Aiheet (esim. peruutus, liittymät)..."
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden"
+              />
             </div>
 
-            {/* Jos katselija on opettaja/admin ja ajo ei vielä hyväksytty */}
-            {isAdmin && !approvedLocal ? (
-              <div className="mt-3 space-y-2">
-                <input
-                  type="text"
-                  value={feedbackText}
-                  onChange={(e) => setFeedbackText(e.target.value)}
-                  placeholder="Kirjoita opettajan palaute oppilaalle (valinnainen)..."
-                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden"
-                />
-                <button
-                  onClick={handleApprove}
-                  disabled={isApproving}
-                  className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition flex items-center space-x-1.5"
-                >
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Opettajan arvio ja huomiot:
+              </label>
+              <textarea
+                value={teacherNotes}
+                onChange={(e) => setTeacherNotes(e.target.value)}
+                rows={2}
+                placeholder="Opettajan palaute oppilaalle..."
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              {savedSuccess ? (
+                <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center space-x-1 font-semibold">
                   <Check className="w-4 h-4" />
-                  <span>{isApproving ? 'Kuitataan...' : 'Kuittaa ajo hyväksytyksi'}</span>
-                </button>
-              </div>
-            ) : (
-              drive.teacherFeedback && (
-                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 italic">
-                  "{drive.teacherFeedback}"
-                </p>
-              )
-            )}
+                  <span>Muutokset tallennettu!</span>
+                </span>
+              ) : <div />}
+
+              <button
+                type="button"
+                onClick={handleSaveNotes}
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition flex items-center space-x-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Tallenna muutokset</span>
+              </button>
+            </div>
           </div>
 
         </div>

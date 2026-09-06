@@ -90,22 +90,22 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ stats }) => {
           </span>
         </div>
 
-        {/* Opettajan Kuittaamat */}
+        {/* Jäljellä tavoitteesta */}
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Hyväksytyt ajot</span>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Jäljellä 10 h tavoitteesta</span>
             <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline space-x-1">
             <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              {stats.approvedDrives}
+              {Math.max(0, Number((minTargetHours - totalHours).toFixed(1)))}
             </span>
-            <span className="text-xs text-slate-500 font-medium">/ {stats.totalDrives} kuitattu</span>
+            <span className="text-xs text-slate-500 font-medium">h jäljellä</span>
           </div>
           <span className="text-[10px] text-slate-400 mt-4 block">
-            Opettajan allekirjoittamat ajot
+            {totalHours >= minTargetHours ? 'Opetusluvan 10h minimi täytetty! 🎉' : 'Vaaditaan ennen ajokoetta'}
           </span>
         </div>
 

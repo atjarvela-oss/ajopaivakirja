@@ -1,60 +1,49 @@
-# Opetuslupaoppilaan Ajopäiväkirja (Driving Logbook)
+# Opetuslupaoppilaan Ajopäiväkirja (Puhdas Android-sovellus)
 
-Moderni, mobiilioptimoitu verkkosovellus (PWA) opetuslupaoppilaan ajokertojen tallennukseen, reaaliaikaiseen GPS-reitin seurantaan ja automaattiseen ajoympäristön arviointiin.
+Yksinkertainen, nopea ja paikallisesti toimiva Android-ajopäiväkirja opetuslupaopetukseen. Suunniteltu suoraan opettajan puhelimeen ilman käyttäjätunnuksia, kirjautumisia tai pilvitietokantoja.
 
-Sovellus täyttää Traficomin ja Ajovarman vaatimukset opetusluvalla suoritettavien ajotuntien dokumentoinnille, ajoympäristöjen erittelylle sekä opettajan kuittauksille.
+Sovellus täyttää Traficomin ja Ajovarman vaatimukset opetusluvalla suoritettavien ajotuntien dokumentoinnille, ajoympäristöjen erittelylle sekä allekirjoituksille.
 
 ---
 
-## Ominaisuudet
+## Keskeiset ominaisuudet
 
-1. **Google-kirjautuminen & Käyttöoikeuksien Hallinta (RBAC)**:
-   - **Pääkäyttäjä**: `atjarvela@gmail.com` (saa automaattisesti järjestelmänvalvojan / opettajan oikeudet).
-   - **Roolit**:
-     - **Opettaja / Pääkäyttäjä (`admin`)**: Hallintapaneeli käyttäjille, voi tarkastella kaikkien oppilaiden ajopäiväkirjoja, antaa palautetta ja kuitata ajokertoja hyväksytyksi opetuslupaan.
-     - **Oppilas (`student`)**: Tallentaa omia ajokertojaan ja seuraa omia tilastojaan.
-   - Toimii suoraan Firebase Authenticationin Google Providerilla sekä helppokäyttöisessä demotilassa.
+1. **Ei käyttäjätilejä eikä pilvitietokantoja**:
+   - Sovellus aukeaa välittömästi ilman rekisteröinti- tai kirjautumisseinää.
+   - Kaikki ajokerrat, reitit ja tilastot tallentuvat 100 % paikallisesti puhelimen tallennustilaan (offline-first).
 
-2. **Ajan ja Sijainnin Tallennus (GPS)**:
+2. **Varmuuskopiointi Google Driveen**:
+   - Yhdellä painalluksella ("Google Drive") sovellus luo täyden varmuuskopiotiedoston (`ajopaivakirja_backup_YYYY-MM-DD.json`) ja avaa Androidin järjestelmäjakovalikon, josta voi valita suoraan **Tallenna Google Driveen**.
+   - Varmuuskopion voi milloin tahansa palauttaa "Palauta"-painikkeella.
+
+3. **PDF- ja PNG-vienti**:
+   - **PDF-vienti**: Virallinen, valmiiksi muotoiltu A4-kokoinen ajopäiväkirja (otsikot, oppilas, opettaja, ajoympäristöyhteenveto, ajokertataulukko ja allekirjoitusviivat).
+   - **PNG-kuvavienti**: Korkearesoluutioinen kuva ajopäiväkirjataulukosta ja yhteenvedosta helppoon jakamiseen (esim. WhatsAppilla tai galleriaan tallentamiseksi).
+
+4. **Ajan ja sijainnin tallennus (GPS)**:
    - Lähtöaika, lopetusaika, kesto sekuntikellolla.
-   - Ajettu matka (km), hetkellinen nopeus (km/h), keskinopeus ja huippunopeus.
-   - Interaktiivinen kartta (Leaflet + OpenStreetMap) reaaliaikaisella reittiviivalla ja tarkkuusmittarilla.
-   - Sisäänrakennettu **ajosimulaattori**, jolla sovellusta ja ajoympäristöjen tunnistusta voi kokeilla heti työpöydällä ilman ajamista.
+   - Ajettu matka (km), hetkellinen nopeus (km/h) ja huippunopeus.
+   - Interaktiivinen kartta (Leaflet + OpenStreetMap) reaaliaikaisella reittiviivalla.
+   - Sisäänrakennettu **ajosimulaattori**, jolla ajoa ja ajoympäristön arviointia voi kokeilla heti ilman ajamista.
 
-3. **Automaattinen Ajoympäristön Arviointi**:
-   - Sovellus analysoi ajon aikana GPS-pisteitä, nopeutta ja pysähdyksiä:
-     - **Maantie / Moottoritie**: Nopeus > 65–100 km/h, vähän pysähdyksiä.
+5. **Automaattinen ajoympäristön arviointi**:
+   - Analysoi reaaliaikaisesti ajonopeuksia, pysähdyksiä ja liikkuma-aluetta:
+     - **Maantie / Moottoritie**: Nopeus > 68 km/h, vähän pysähdyksiä.
      - **Taajama**: 40–65 km/h, asuinalueet ja kiertoliittymät.
-     - **Kaupunki**: 15–40 km/h, toistuvat liikennevalot ja risteykset.
-     - **Pysäköinti / Käsittely**: < 15 km/h, toistuvat suunnanmuutokset ja pieni liikkuma-alue.
-   - Laskee prosenttijakauman ja ehdottaa pääasiallista kategoriaa (oppilas voi myös säätää arviota).
-
-4. **Taulukkotyylinen Listaus & Raportit**:
-   - Responsiivinen taulukko: Pvm, ajat, kesto, kilometrit, nopeus, ajoympäristö, opettajan kuittaus ja muistiinpanot.
-   - Reitin katselu kartalla mistä tahansa ajetusta kerrasta (lähtö- ja lopetuspisteet).
-   - CSV-vienti Exceliin / Google Sheetsiin.
-   - Tulostusystävällinen virallinen opetuslupalomake allekirjoituskenttineen (A4/PDF).
+     - **Kaupunki**: 15–38 km/h, toistuvat liikennevalot ja risteykset.
+     - **Pysäköinti / Käsittely**: Nopeus < 15 km/h ja tiheät suunnanmuutokset (peruutus, taskuparkki).
+   - Ajon päätyttyä sovellus laskee prosenttijakauman ja ehdottaa pääasiallista kategoriaa, jonka opettaja voi vahvistaa tai säätää.
 
 ---
 
-## Teknologiapino
-
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, Lucide Icons, Leaflet
-- **Autentikointi**: Firebase Authentication (Google Auth)
-- **Tietokanta**: Cloud Firestore + selaimen offline-välimuisti
-- **Pilvifunktiot**: Firebase Cloud Functions v2 (`functions/`)
-- **Tietoturva**: `firestore.rules` (roolipohjainen suojaus)
-
----
-
-## Asennus ja Kehitys
+## Sovelluksen käynnistys ja kehitys
 
 ### 1. Asenna riippuvuudet
 ```bash
 npm install
 ```
 
-### 2. Käynnistä kehityspalvelin
+### 2. Käynnistä paikallinen esikatselu
 ```bash
 npm run dev
 ```
@@ -65,51 +54,26 @@ Avaa selain osoitteessa `http://localhost:5173`.
 npm test
 ```
 
-### 4. Rakenna tuotantoversio
+### 4. Käännä tuotantoversio ja synkronoi Android-projektiin
 ```bash
-npm run build
+npm run android:sync
 ```
+
+### 5. Avaa Android Studiossa ja rakenna APK
+```bash
+npm run android:open
+```
+Android Studiossa voit ajaa sovelluksen suoraan USB-kytkettyyn Android-puhelimeesi tai valita valikosta:
+`Build -> Build Bundle(s) / APK(s) -> Build APK(s)`.
+Syntynyt `.apk`-tiedosto voidaan asentaa suoraan opettajan puhelimeen!
 
 ---
 
-## GitHub-ohjeet
+## Projektin rakenne
 
-Projektissa on alustettu valmiiksi Git-repositorio `main`-haarassa ja `.gitignore` valmiina.
-
-Voit julkaista koodin omaan GitHub-tiliisi näin:
-
-```bash
-# 1. Lisää muutokset ja tee commit
-git add .
-git commit -m "Initial commit: Opetuslupaoppilaan ajopäiväkirja"
-
-# 2. Luo uusi repositorio GitHubissa (esim. nimellä ajopaivakirja)
-# 3. Yhdistä paikallinen repositorio GitHubiin:
-git remote add origin https://github.com/<sinun-kayttajatunnus>/<repositorion-nimi>.git
-git push -u origin main
-```
-
----
-
-## Firebase-käyttöönotto
-
-1. Luo ilmainen projekti osoitteessa [Firebase Console](https://console.firebase.google.com/).
-2. Ota käyttöön **Authentication** -> Valitse **Google**-kirjautumismenetelmä.
-3. Ota käyttöön **Cloud Firestore**.
-4. Kopioi Web App -konfiguraatio joko:
-   - Tiedostoon `.env` (katso mallia `.env.example`):
-     ```env
-     VITE_FIREBASE_API_KEY=AIzaSy...
-     VITE_FIREBASE_AUTH_DOMAIN=oma-projekti.firebaseapp.com
-     VITE_FIREBASE_PROJECT_ID=oma-projekti
-     VITE_ADMIN_EMAIL=atjarvela@gmail.com
-     ```
-   - TAI suoraan sovelluksen yläpalkin rataskuvakkeesta (Asetukset -> Liitä Firebase config).
-5. Ota tietoturvasäännöt käyttöön:
-   ```bash
-   firebase deploy --only firestore:rules
-   ```
-6. (Valinnainen) Ota käyttöön Hosting ja Cloud Functions:
-   ```bash
-   firebase deploy
-   ```
+- `android/`: Täydellinen natiivi Android Studio -projekti (Gradle, AndroidManifest, Java/Kotlin).
+- `src/services/localDb.ts`: Paikallinen tietokanta (IndexedDB / LocalStorage).
+- `src/services/exportService.ts`: PDF- ja PNG-viennin generointi (`jspdf`, `jspdf-autotable`, `html-to-image`).
+- `src/services/driveBackup.ts`: Google Drive -varmuuskopiopalvelu ja palautus.
+- `src/services/environmentClassifier.ts`: Ajoympäristön automaattinen tunnistusalgoritmi.
+- `src/components/`: Käyttöliittymäkomponentit (ajotilan GPS-seuranta, Leaflet-kartta, taulukko, yhteenvedot).
