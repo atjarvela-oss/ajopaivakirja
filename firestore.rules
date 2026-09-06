@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper-funktiot
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == 'atjarvela@gmail.com' ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Käyttäjäprofiilit ja roolit
+    match /users/{userId} {
+      // Kaikki kirjautuneet voivat lukea käyttäjälistaa (opettaja oppilaita)
+      allow read: if isAuthenticated();
+      
+      // Käyttäjä voi luoda oman profiilinsa
+      allow create: if isAuthenticated() && (
+        isOwner(userId) && (
+          // atjarvela@gmail.com saa admin-roolin suoraan, muut student-roolin
+          (request.auth.token.email == 'atjarvela@gmail.com' && request.resource.data.role == 'admin') ||
+          (request.auth.token.email != 'atjarvela@gmail.com' && request.resource.data.role == 'student')
+        )
+      );
+
+      // Pääkäyttäjä voi päivittää mitä vain (kuten rooleja), käyttäjä itse vain omia perustietojaan (nimeä/kuvaa, ei roolia)
+      allow update: if isSuperAdmin() || (
+        isOwner(userId) && 
+        request.resource.data.role == resource.data.role
+      );
+
+      // Vain pääkäyttäjä voi poistaa käyttäjiä
+      allow delete: if isSuperAdmin();
+    }
+
+    // Ajokerrat
+    match /drives/{driveId} {
+      // Oppilas näkee omat ajonsa, pääkäyttäjä/opettaja näkee kaikki
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() || 
+        resource.data.studentId == request.auth.uid
+      );
+      
+      // Oppilas voi luoda itselleen uuden ajon, tai opettaja kenelle vain
+      allow create: if isAuthenticated() && (
+        isSuperAdmin() || 
+        request.resource.data.studentId == request.auth.uid
+      );
+      
+      // Oppilas voi päivittää omaa ajoaan (mutta ei muuttaa teacherApproved -tilaa ilman opettajaoikeutta)
+      // Pääkäyttäjä/opettaja voi päivittää ja kuitata minkä tahansa ajon
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() || (
+          resource.data.studentId == request.auth.uid &&
+          request.resource.data.studentId == request.auth.uid &&
+          request.resource.data.approvedByTeacher == resource.data.approvedByTeacher
+        )
+      );
+
+      // Oppilas voi poistaa oman ajonsa, pääkäyttäjä minkä tahansa
+      allow delete: if isAuthenticated() && (
+        isSuperAdmin() || 
+        resource.data.studentId == request.auth.uid
+      );
+    }
+  }
+}
