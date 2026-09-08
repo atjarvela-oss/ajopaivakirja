@@ -11,9 +11,11 @@ const pad = (n) => n.toString().padStart(2, '0');
 const pvm = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
 const klo = `${pad(now.getHours())}${pad(now.getMinutes())}`;
 const version = `1.${pvm}.${klo}`;
+// versionCode: sekunteina vuodesta 2024 alkaen (positiivinen 32-bittinen kokonaisluku, kasvaa jokaisella käännöksellä)
+const versionCode = Math.floor((now.getTime() - 1704067200000) / 1000);
 
 const versionFile = path.join(root, 'version.json');
-fs.writeFileSync(versionFile, JSON.stringify({ version, updatedAt: now.toISOString() }, null, 2), 'utf8');
+fs.writeFileSync(versionFile, JSON.stringify({ version, versionCode, updatedAt: now.toISOString() }, null, 2), 'utf8');
 
 // Synkronoidaan myös package.json
 const pkgFile = path.join(root, 'package.json');
@@ -33,6 +35,7 @@ if (fs.existsSync(gradleFile)) {
   try {
     let gradle = fs.readFileSync(gradleFile, 'utf8');
     gradle = gradle.replace(/versionName\s+["'][^"']+["']/, `versionName "${version}"`);
+    gradle = gradle.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`);
     fs.writeFileSync(gradleFile, gradle, 'utf8');
   } catch (e) {
     console.warn('[version] android/app/build.gradle päivitys epäonnistui:', e);
