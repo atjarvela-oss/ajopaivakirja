@@ -21,11 +21,11 @@ jobs:
           node-version: 22
           cache: 'npm'
 
-      - name: Asenna Java (JDK 17)
+      - name: Asenna Java (JDK 21)
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
           cache: 'gradle'
 
       - name: Asenna riippuvuudet
