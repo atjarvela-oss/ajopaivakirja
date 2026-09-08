@@ -32,18 +32,18 @@ export const Navbar: FC<NavbarProps> = ({
   ];
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-800 transition-colors shadow-xs no-print">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+    <header className="sticky top-0 z-30 shrink-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-800 transition-colors shadow-xs no-print">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-13 sm:h-16">
           
           {/* Logo ja Sovelluksen Nimi */}
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-              <Car className="w-6 h-6" />
+          <div className="flex items-center space-x-2.5 sm:space-x-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 shrink-0">
+              <Car className="w-4.5 h-4.5 sm:w-6 sm:h-6" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-bold text-base sm:text-lg text-slate-900 dark:text-white tracking-tight">
+                <span className="font-bold text-sm sm:text-lg text-slate-900 dark:text-white tracking-tight">
                   Opetuslupalaisen ajopäiväkirja
                 </span>
                 {isDriving && (

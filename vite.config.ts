@@ -27,6 +27,14 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    host: '0.0.0.0',
+    port: 3000,
+  },
+  preview: {
+    host: '0.0.0.0',
+    port: 3000,
+  },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
   },

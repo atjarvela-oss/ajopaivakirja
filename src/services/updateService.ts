@@ -127,5 +127,9 @@ export async function checkForAppUpdate(targetRepo = getGitHubRepo()): Promise<U
  */
 export function openUpdateDownload(url: string): void {
   if (!url) return;
-  window.open(url, '_system');
+  try {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } catch {
+    window.location.href = url;
+  }
 }

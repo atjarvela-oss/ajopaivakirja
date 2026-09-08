@@ -119,16 +119,11 @@ export async function exportTraficomPdf(
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  // 1. Ylätunniste (Opetuskortti opetuslupalaisille)
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.setTextColor(0, 0, 0);
-  doc.text('OPETUSKORTTI', 14, 18);
-
+  // 1. Ylätunniste
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(8);
   doc.setTextColor(60, 60, 60);
-  doc.text('Opetuslupaopetuksen ajopäiväkirja', 14, 22);
+  doc.text('Opetuslupaopetuksen ajopäiväkirja', 14, 21.5);
   doc.text('Undervisningstillstånd körjournal', 14, 25.5);
 
   doc.setFont('helvetica', 'bold');

@@ -198,13 +198,10 @@ export const TraficomCard: React.FC<TraficomCardProps> = ({
         className="bg-white text-black p-4 sm:p-8 rounded-2xl shadow-lg border border-slate-300 font-sans max-w-4xl mx-auto"
       >
         
-        {/* 1. Yläotsikko (Opetuskortti) */}
+        {/* 1. Yläotsikko */}
         <div className="flex items-start justify-between border-b-2 border-black pb-3 mb-3">
           <div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight leading-none text-black">
-              OPETUSKORTTI
-            </h1>
-            <p className="text-[10px] text-slate-700 leading-tight mt-1">
+            <p className="text-[10px] sm:text-xs text-slate-700 leading-tight">
               Opetuslupaopetuksen ajopäiväkirja<br />
               <span className="italic">Undervisningstillstånd körjournal</span>
             </p>

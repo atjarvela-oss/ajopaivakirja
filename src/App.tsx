@@ -161,7 +161,11 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased transition-colors pb-16 sm:pb-0">
+    <div className={`bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased transition-colors ${
+      activeTab === 'ajo'
+        ? 'h-[100dvh] max-h-[100dvh] overflow-hidden pb-14 sm:pb-0'
+        : 'min-h-screen pb-16 sm:pb-0'
+    }`}>
       
       {/* Yläpalkki (Siisti, ilman ylimääräisiä nappeja ja tekstejä) */}
       <Navbar
@@ -190,7 +194,11 @@ export function App() {
       )}
 
       {/* Pääsisältö välilehtien mukaan */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
+      <main className={`w-full mx-auto transition-all ${
+        activeTab === 'ajo'
+          ? 'flex-1 flex flex-col min-h-0 max-w-7xl px-2 sm:px-4 lg:px-6 py-2 sm:py-3 h-full overflow-hidden'
+          : 'flex-1 max-w-7xl px-4 sm:px-6 lg:px-8 py-5 sm:py-7'
+      }`}>
         
         {/* Välilehti 1: Yhteenveto */}
         {activeTab === 'yhteenveto' && (
@@ -206,7 +214,7 @@ export function App() {
         )}
 
         {/* Välilehti 2: Ajo (Pidetään DOM:ssa piilotettuna jotta GPS-seuranta ei katkea välilehteä vaihdettaessa) */}
-        <div className={activeTab === 'ajo' ? 'block' : 'hidden'}>
+        <div className={activeTab === 'ajo' ? 'flex-1 flex flex-col min-h-0 h-full' : 'hidden'}>
           <DriveTracker
             isActiveTab={activeTab === 'ajo'}
             onDriveSaved={handleDriveSaved}

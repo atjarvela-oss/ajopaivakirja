@@ -195,6 +195,17 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
     }
   }, [isDriving, isPaused]);
 
+  const centerMapOnUser = () => {
+    if (mapInstanceRef.current && currentMarkerRef.current) {
+      mapInstanceRef.current.setView(currentMarkerRef.current.getLatLng(), 16);
+    } else if (navigator.geolocation && mapInstanceRef.current) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const userLoc: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+        mapInstanceRef.current?.setView(userLoc, 16);
+      });
+    }
+  };
+
   // Päivitetään kartan reitti ja sijainti
   useEffect(() => {
     if (!mapInstanceRef.current || routePoints.length === 0) return;
@@ -414,84 +425,96 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
   const currentEnvInfo = ENVIRONMENT_CONFIG[liveEnvironment.primary];
 
   return (
-    <div className="space-y-4">
+    <div className="flex-1 flex flex-col min-h-0 h-full w-full max-w-4xl mx-auto">
       {/* Ajotilan Pääpaneeli */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 h-full w-full bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl shadow-sm sm:shadow-md border border-slate-200 dark:border-slate-800 overflow-hidden">
         
-        {/* Yläpalkki: Tila ja Painikkeet */}
-        <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className={`p-3 rounded-xl flex items-center justify-center transition-colors ${
-              !isDriving 
-                ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                : isPaused
-                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
-                : 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 animate-pulse'
-            }`}>
-              {isPaused ? (
-                <Pause className="w-6 h-6" />
-              ) : (
-                <Navigation className="w-6 h-6" />
-              )}
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {!isDriving 
-                    ? 'Valmiina ajoon'
-                    : isPaused
-                    ? 'Ajo tauolla'
-                    : 'Ajoseuranta käynnissä'}
-                </h2>
-                {isDriving && (
-                  <span className="flex h-2.5 w-2.5 relative">
-                    {isPaused ? (
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-                    ) : (
-                      <>
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                      </>
-                    )}
-                  </span>
+        {/* Yläpalkki: Tila (Rivi 1) ja Painikkeet (Rivi 2) */}
+        <div className="shrink-0 px-3.5 py-2.5 sm:px-5 sm:py-3 border-b border-slate-100 dark:border-slate-800 space-y-2.5">
+          
+          {/* Rivi 1: Tilakuvake, Otsikko ja Tilan kuvaus */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center space-x-2.5 min-w-0">
+              <div className={`p-2 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                !isDriving 
+                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                  : isPaused
+                  ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
+                  : 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 animate-pulse'
+              }`}>
+                {isPaused ? (
+                  <Pause className="w-4.5 h-4.5 text-amber-600 dark:text-amber-400" />
+                ) : (
+                  <Navigation className="w-4.5 h-4.5" />
                 )}
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {!isDriving
-                  ? 'Käynnistä seuranta aloittaessasi ajotunnin'
-                  : isPaused
-                  ? 'Ajo on keskeytetty – aika ja matka eivät kerry'
-                  : 'GPS tallentaa reittiä, nopeutta ja ajoympäristöä'}
-              </p>
+              <div className="min-w-0">
+                <div className="flex items-center space-x-2">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                    {!isDriving 
+                      ? 'Valmiina ajoon'
+                      : isPaused
+                      ? 'Ajo tauolla'
+                      : 'Ajoseuranta käynnissä'}
+                  </h2>
+                  {isDriving && (
+                    <span className="flex h-2.5 w-2.5 relative shrink-0">
+                      {isPaused ? (
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                      ) : (
+                        <>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                        </>
+                      )}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  {!isDriving
+                    ? 'Käynnistä seuranta aloittaessasi ajotunnin'
+                    : isPaused
+                    ? 'Ajo keskeytetty – aika ja matka eivät kerry'
+                    : 'GPS tallentaa reittiä ja ajoympäristöä'}
+                </p>
+              </div>
             </div>
+
+            {/* GPS-indikaattori ajon aikana */}
+            {isDriving && (
+              <div className="shrink-0 flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+                <Radio className="w-3 h-3 text-emerald-500 animate-pulse" />
+                <span>{routePoints.length} pistettä</span>
+              </div>
+            )}
           </div>
 
-          {/* Toimintopainikkeet */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Rivi 2: Toimintopainikkeet jaettu omalle rivilleen */}
+          <div className="grid grid-cols-2 gap-2 pt-0.5">
             {!isDriving ? (
               <>
                 <button
                   onClick={onOpenManualEntry}
-                  className="px-3 py-2 text-xs sm:text-sm font-medium rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition cursor-pointer"
+                  className="w-full py-2 px-3 text-xs sm:text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition cursor-pointer flex items-center justify-center space-x-1.5 shadow-2xs"
                 >
-                  Lisää ajo manuaalisesti
+                  <span>Lisää ajo manuaalisesti</span>
                 </button>
 
                 <button
                   onClick={startRealDrive}
-                  className="px-5 py-2.5 text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition flex items-center space-x-2 cursor-pointer"
+                  className="w-full py-2 px-3 text-xs sm:text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 active:scale-98 transition flex items-center justify-center space-x-1.5 cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-white" />
                   <span>Aloita ajo (GPS)</span>
                 </button>
               </>
             ) : (
-              <div className="flex items-center gap-2">
+              <>
                 {!isPaused ? (
                   <button
                     onClick={pauseDrive}
-                    className="px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white shadow-md shadow-amber-500/20 active:scale-95 transition flex items-center space-x-1.5 cursor-pointer"
-                    title="Aseta ajo tauolle (pysäyttää ajan ja matkan kertymisen)"
+                    className="w-full py-2 px-3 text-xs sm:text-sm font-bold rounded-lg bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white shadow-sm active:scale-98 transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                    title="Aseta ajo tauolle"
                   >
                     <Pause className="w-4 h-4 fill-white" />
                     <span>Tauko</span>
@@ -499,116 +522,111 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
                 ) : (
                   <button
                     onClick={resumeDrive}
-                    className="px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-lg shadow-emerald-600/30 active:scale-95 transition flex items-center space-x-1.5 animate-pulse cursor-pointer"
+                    className="w-full py-2 px-3 text-xs sm:text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-sm shadow-emerald-600/30 active:scale-98 transition flex items-center justify-center space-x-1.5 animate-pulse cursor-pointer"
                     title="Jatka ajoseurantaa"
                   >
                     <Play className="w-4 h-4 fill-white" />
-                    <span>Jatka ajoa</span>
+                    <span>Jatka</span>
                   </button>
                 )}
 
                 <button
                   onClick={stopDrive}
-                  className="px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-bold rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white shadow-md shadow-rose-600/25 active:scale-95 transition flex items-center space-x-1.5 cursor-pointer"
+                  className="w-full py-2 px-3 text-xs sm:text-sm font-bold rounded-lg bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white shadow-sm active:scale-98 transition flex items-center justify-center space-x-1.5 cursor-pointer"
                   title="Päätä ajo ja siirry tallennukseen"
                 >
                   <Square className="w-4 h-4 fill-white" />
                   <span>Päätä ajo</span>
                 </button>
-              </div>
+              </>
             )}
           </div>
         </div>
 
-        {/* Telemetria ja Mittarit (Ajon aikana) */}
-        <div className="p-4 sm:p-6 bg-slate-50/70 dark:bg-slate-850/50 border-b border-slate-100 dark:border-slate-800">
+        {/* Telemetria ja Mittarit (Ajon aikana ja valmiustilassa) */}
+        <div className="shrink-0 p-2.5 sm:p-3.5 bg-slate-50/80 dark:bg-slate-850/60 border-b border-slate-100 dark:border-slate-800">
           
           {/* Tauko-ilmoituspalkki */}
           {isDriving && isPaused && (
-            <div className="mb-4 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 flex items-center justify-between gap-3 animate-in fade-in duration-200">
-              <div className="flex items-center space-x-2.5 text-amber-900 dark:text-amber-200 text-xs sm:text-sm">
-                <PauseCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-                <span>Ajo on <strong>tauolla</strong> – aika ja matka eivät kerry. Paina <strong>"Jatka ajoa"</strong> kun jatkatte matkaa.</span>
+            <div className="mb-2 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 flex items-center justify-between gap-2 animate-in fade-in duration-200">
+              <div className="flex items-center space-x-1.5 text-amber-900 dark:text-amber-200 text-xs min-w-0 truncate">
+                <PauseCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="truncate">Ajo on <strong>tauolla</strong> – aika ja matka eivät kerry.</span>
               </div>
               <button
                 onClick={resumeDrive}
-                className="shrink-0 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-sm cursor-pointer"
+                className="shrink-0 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer"
               >
-                <Play className="w-3.5 h-3.5 fill-white" />
+                <Play className="w-2.5 h-2.5 fill-white" />
                 <span>Jatka</span>
               </button>
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-3">
             
             {/* Kesto */}
-            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-xs">
-                  <Timer className="w-3.5 h-3.5 text-blue-500" />
-                  <span>Ajoaika</span>
-                </div>
+            <div className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-2xs flex flex-col justify-center min-w-0">
+              <div className="flex items-center justify-between mb-0.5 text-slate-500 dark:text-slate-400 text-[10px] sm:text-xs">
+                <span className="flex items-center space-x-1 truncate">
+                  <Timer className="w-3 h-3 text-blue-500 shrink-0" />
+                  <span className="font-medium truncate">Aika</span>
+                </span>
                 {isDriving && isPaused && (
-                  <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 rounded">
+                  <span className="text-[9px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-1 py-0.2 rounded hidden sm:inline">
                     Tauko
                   </span>
                 )}
               </div>
-              <div className="text-xl sm:text-2xl font-bold font-mono text-slate-900 dark:text-white">
+              <div className="text-sm xs:text-base sm:text-xl font-bold font-mono text-slate-900 dark:text-white truncate">
                 {formatTime(elapsedSeconds)}
               </div>
             </div>
 
             {/* Matka */}
-            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
-              <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-xs mb-1">
-                <MapPin className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Matka</span>
+            <div className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-2xs flex flex-col justify-center min-w-0">
+              <div className="flex items-center space-x-1 text-slate-500 dark:text-slate-400 text-[10px] sm:text-xs mb-0.5 truncate">
+                <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                <span className="font-medium truncate">Matka</span>
               </div>
-              <div className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-                {totalDistanceKm} <span className="text-xs font-normal text-slate-500">km</span>
+              <div className="text-sm xs:text-base sm:text-xl font-bold text-slate-900 dark:text-white truncate">
+                {totalDistanceKm} <span className="text-[10px] sm:text-xs font-normal text-slate-500">km</span>
               </div>
             </div>
 
             {/* Hetkellinen Nopeus */}
-            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-xs">
-                  <Gauge className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Nopeus</span>
-                </div>
-                {isDriving && isPaused && (
-                  <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 rounded">
-                    Pysäytetty
+            <div className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-2xs flex flex-col justify-center min-w-0">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[10px] sm:text-xs mb-0.5 truncate">
+                <span className="flex items-center space-x-1 truncate">
+                  <Gauge className="w-3 h-3 text-amber-500 shrink-0" />
+                  <span className="font-medium truncate">Nopeus</span>
+                </span>
+                {maxSpeed > 0 && (
+                  <span className="hidden sm:inline text-[9px] text-slate-400">
+                    max {maxSpeed}
                   </span>
                 )}
               </div>
-              <div className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-baseline space-x-1">
+              <div className="text-sm xs:text-base sm:text-xl font-bold text-slate-900 dark:text-white truncate">
                 {isDriving && isPaused ? (
-                  <span className="text-amber-600 dark:text-amber-400 text-lg sm:text-xl font-medium">0 km/h</span>
+                  <span className="text-amber-600 dark:text-amber-400">0 km/h</span>
                 ) : (
                   <>
-                    <span>{currentSpeed}</span>
-                    <span className="text-xs font-normal text-slate-500">km/h</span>
-                    {maxSpeed > 0 && (
-                      <span className="text-[10px] text-slate-400 ml-auto hidden sm:inline">
-                        max {maxSpeed}
-                      </span>
-                    )}
+                    <span>{currentSpeed}</span>{' '}
+                    <span className="text-[10px] sm:text-xs font-normal text-slate-500">km/h</span>
                   </>
                 )}
               </div>
             </div>
 
             {/* Sovelluksen Arvio Ajoympäristöstä */}
-            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
-              <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-xs mb-1">
-                <Sparkles className="w-3.5 h-3.5 text-purple-500" />
-                <span>Arvioitu ympäristö</span>
+            <div className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-2xs flex flex-col justify-center min-w-0">
+              <div className="flex items-center space-x-1 text-slate-500 dark:text-slate-400 text-[10px] sm:text-xs mb-0.5 truncate">
+                <Sparkles className="w-3 h-3 text-purple-500 shrink-0" />
+                <span className="font-medium truncate">Ympäristö</span>
               </div>
-              <div className="flex items-center space-x-1.5">
-                <span className={`text-xs px-2.5 py-1 rounded-lg font-semibold border ${currentEnvInfo.badgeClass}`}>
+              <div className="flex items-center">
+                <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded-md font-semibold border ${currentEnvInfo.badgeClass} truncate max-w-full`}>
                   {currentEnvInfo.label.split(' / ')[0]}
                 </span>
               </div>
@@ -618,16 +636,16 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
 
           {/* Ympäristöjakaumapalkki ajon aikana */}
           {isDriving && routePoints.length > 2 && (
-            <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-700/60">
-              <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
-                <span className="font-medium text-slate-700 dark:text-slate-300">
-                  Sovelluksen analyysi ajoympäristöstä:
+            <div className="mt-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60">
+              <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                <span className="font-medium text-slate-700 dark:text-slate-300 truncate text-[11px]">
+                  Ympäristöjakauma:
                 </span>
-                <span className="text-[11px]">
-                  Maantie {liveEnvironment.distribution.maantie}% • Taajama {liveEnvironment.distribution.taajama}% • Kaupunki {liveEnvironment.distribution.kaupunki}% • Pysäköinti {liveEnvironment.distribution.pysakointi}%
+                <span className="text-[10px] truncate ml-1 text-slate-600 dark:text-slate-300">
+                  M {liveEnvironment.distribution.maantie}% • T {liveEnvironment.distribution.taajama}% • K {liveEnvironment.distribution.kaupunki}%
                 </span>
               </div>
-              <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
+              <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
                 <div 
                   style={{ width: `${liveEnvironment.distribution.maantie}%` }} 
                   className="bg-emerald-500 h-full transition-all duration-500" 
@@ -653,24 +671,35 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
           )}
         </div>
 
-        {/* Karttanäkymä */}
-        <div className="relative h-64 sm:h-80 w-full bg-slate-100 dark:bg-slate-800">
+        {/* Karttanäkymä (Täyttää dynaamisesti aina kaiken jäljellä olevan tilan) */}
+        <div className="relative flex-1 min-h-[140px] h-full w-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
           <div ref={mapContainerRef} className="w-full h-full" />
 
-          {/* Kartan päällä oleva GPS-tarkkuustila */}
+          {/* Kartan päällä oleva GPS-tarkkuustila ajon aikana */}
           {isDriving && (
-            <div className="absolute top-3 left-3 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xs px-3 py-1.5 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-xs flex items-center space-x-2">
-              <Radio className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
-              <span className="text-slate-700 dark:text-slate-300">
+            <div className="absolute top-2.5 left-2.5 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xs px-2.5 py-1 rounded-md shadow-xs border border-slate-200 dark:border-slate-700 text-[11px] flex items-center space-x-1.5">
+              <Radio className="w-3 h-3 text-emerald-500 animate-pulse" />
+              <span className="text-slate-700 dark:text-slate-300 font-medium">
                 Pisteitä: <strong>{routePoints.length}</strong>
               </span>
               {gpsAccuracy !== null && (
                 <span className="text-slate-400">
-                  (Tarkkuus: ±{gpsAccuracy}m)
+                  (±{gpsAccuracy}m)
                 </span>
               )}
             </div>
           )}
+
+          {/* Keskitä sijaintiin -painike */}
+          <button
+            type="button"
+            onClick={centerMapOnUser}
+            className="absolute bottom-3 right-3 z-20 p-2 sm:px-3 sm:py-2 rounded-lg bg-white/95 dark:bg-slate-900/95 shadow-md border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition active:scale-95 flex items-center space-x-1.5 text-xs font-medium"
+            title="Keskitä sijaintiin"
+          >
+            <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span className="hidden xs:inline">Keskitä</span>
+          </button>
         </div>
 
       </div>
