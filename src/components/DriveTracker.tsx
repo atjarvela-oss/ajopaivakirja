@@ -85,7 +85,16 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
+    let isMounted = true;
+    let t1: any = null;
+    let t2: any = null;
+
     if (!mapInstanceRef.current) {
+      // Varmistetaan puhdas säiliö (esim. React StrictMode -uudelleenkiinnityksessä)
+      if ((mapContainerRef.current as any)._leaflet_id) {
+        delete (mapContainerRef.current as any)._leaflet_id;
+      }
+
       const defaultCenter: [number, number] = [60.1699, 24.9384]; // Helsinki
       const map = L.map(mapContainerRef.current, {
         center: defaultCenter,
@@ -131,10 +140,15 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
+            if (!isMounted || !mapInstanceRef.current) return;
             const userLoc: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-            map.setView(userLoc, 15);
-            marker.setLatLng(userLoc);
-            map.invalidateSize();
+            try {
+              map.setView(userLoc, 15, { animate: false });
+              marker.setLatLng(userLoc);
+              map.invalidateSize({ pan: false });
+            } catch (e) {
+              console.warn('Virhe alkusijainnin asetuksessa:', e);
+            }
           },
           (err) => {
             console.warn('Alkusijaintia ei saatu:', err);
@@ -145,15 +159,32 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
 
       // Varmistetaan karttaruutujen täysi lataus alkulatauksessa
       map.whenReady(() => {
-        setTimeout(() => map.invalidateSize(), 100);
-        setTimeout(() => map.invalidateSize(), 400);
+        t1 = setTimeout(() => {
+          if (isMounted && mapInstanceRef.current && mapContainerRef.current?.clientWidth) {
+            try {
+              map.invalidateSize({ pan: false });
+            } catch {}
+          }
+        }, 100);
+        t2 = setTimeout(() => {
+          if (isMounted && mapInstanceRef.current && mapContainerRef.current?.clientWidth) {
+            try {
+              map.invalidateSize({ pan: false });
+            } catch {}
+          }
+        }, 400);
       });
     }
 
     return () => {
-      // Clean up map when component unmounts
+      isMounted = false;
+      if (t1) clearTimeout(t1);
+      if (t2) clearTimeout(t2);
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+        try {
+          mapInstanceRef.current.stop();
+          mapInstanceRef.current.remove();
+        } catch {}
         mapInstanceRef.current = null;
       }
     };
@@ -163,8 +194,12 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
   useEffect(() => {
     if (!mapContainerRef.current) return;
     const observer = new ResizeObserver(() => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
+      if (mapInstanceRef.current && mapContainerRef.current) {
+        if (mapContainerRef.current.clientWidth > 0 && mapContainerRef.current.clientHeight > 0) {
+          try {
+            mapInstanceRef.current.invalidateSize({ pan: false });
+          } catch {}
+        }
       }
     });
     observer.observe(mapContainerRef.current);
@@ -174,9 +209,17 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
   // Päivitetään kartan koko aina kun välilehti aktivoituu
   useEffect(() => {
     if (isActiveTab && mapInstanceRef.current) {
-      const t1 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 60);
-      const t2 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 250);
-      const t3 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 600);
+      const updateSize = () => {
+        if (mapInstanceRef.current && mapContainerRef.current && mapContainerRef.current.clientWidth > 0) {
+          try {
+            mapInstanceRef.current.invalidateSize({ pan: false });
+          } catch {}
+        }
+      };
+      updateSize();
+      const t1 = setTimeout(updateSize, 60);
+      const t2 = setTimeout(updateSize, 250);
+      const t3 = setTimeout(updateSize, 600);
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
@@ -187,9 +230,11 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
 
   // Päivitetään kartan koko kun ajotila muuttuu tai tilastopalkit ilmestyvät
   useEffect(() => {
-    if (mapInstanceRef.current) {
+    if (mapInstanceRef.current && mapContainerRef.current && mapContainerRef.current.clientWidth > 0) {
       const timer = setTimeout(() => {
-        mapInstanceRef.current?.invalidateSize();
+        try {
+          mapInstanceRef.current?.invalidateSize({ pan: false });
+        } catch {}
       }, 150);
       return () => clearTimeout(timer);
     }
@@ -197,11 +242,16 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
 
   const centerMapOnUser = () => {
     if (mapInstanceRef.current && currentMarkerRef.current) {
-      mapInstanceRef.current.setView(currentMarkerRef.current.getLatLng(), 16);
+      try {
+        mapInstanceRef.current.setView(currentMarkerRef.current.getLatLng(), 16, { animate: false });
+      } catch {}
     } else if (navigator.geolocation && mapInstanceRef.current) {
       navigator.geolocation.getCurrentPosition((pos) => {
+        if (!mapInstanceRef.current) return;
         const userLoc: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-        mapInstanceRef.current?.setView(userLoc, 16);
+        try {
+          mapInstanceRef.current.setView(userLoc, 16, { animate: false });
+        } catch {}
       });
     }
   };
@@ -214,15 +264,23 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
     const latest = latLngs[latLngs.length - 1];
 
     if (polylineRef.current) {
-      polylineRef.current.setLatLngs(latLngs);
+      try {
+        polylineRef.current.setLatLngs(latLngs);
+      } catch {}
     }
 
     if (currentMarkerRef.current) {
-      currentMarkerRef.current.setLatLng(latest);
+      try {
+        currentMarkerRef.current.setLatLng(latest);
+      } catch {}
     }
 
     // Keskitetään kartta viimeisimpään pisteeseen
-    mapInstanceRef.current.panTo(latest, { animate: true, duration: 0.5 });
+    if (mapContainerRef.current && mapContainerRef.current.clientWidth > 0) {
+      try {
+        mapInstanceRef.current.panTo(latest, { animate: false });
+      } catch {}
+    }
   }, [routePoints]);
 
   // Päivitetään ajoympäristön arvio reaaliajassa ajon aikana (vain kun ajo ei ole tauolla)

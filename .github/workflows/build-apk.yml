@@ -7,6 +7,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -52,12 +55,23 @@ jobs:
           path: ajopaivakirja.apk
           retention-days: 30
 
-      - name: Luo GitHub Release (jos git tag)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Selvitä sovelluksen versio
+        id: app_info
+        run: |
+          VERSION=$(node -p "try { require('./version.json').version } catch(e) { '1.0.0' }")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Luo tai päivitä GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.app_info.outputs.tag }}
+          name: Versio ${{ steps.app_info.outputs.version }}
           files: ajopaivakirja.apk
-          name: ${{ github.ref_name }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

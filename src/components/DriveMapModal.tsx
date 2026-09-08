@@ -37,6 +37,14 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
   useEffect(() => {
     if (!drive || !mapContainerRef.current) return;
 
+    let isMounted = true;
+    let t1: any = null;
+    let t2: any = null;
+
+    if ((mapContainerRef.current as any)._leaflet_id) {
+      delete (mapContainerRef.current as any)._leaflet_id;
+    }
+
     // Alustetaan kartta
     const map = L.map(mapContainerRef.current, {
       zoomControl: true,
@@ -104,28 +112,45 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
 
     // Varmistetaan että modaalin avautumisanimaation jälkeen mitat päivittyvät
     map.whenReady(() => {
-      setTimeout(() => {
-        map.invalidateSize();
-        if (polylineBounds && polylineBounds.isValid()) {
-          map.fitBounds(polylineBounds, { padding: [40, 40] });
-        }
+      t1 = setTimeout(() => {
+        if (!isMounted || !mapInstanceRef.current) return;
+        try {
+          map.invalidateSize({ pan: false });
+          if (polylineBounds && polylineBounds.isValid()) {
+            map.fitBounds(polylineBounds, { padding: [40, 40], animate: false });
+          }
+        } catch {}
       }, 150);
-      setTimeout(() => {
-        map.invalidateSize();
+      t2 = setTimeout(() => {
+        if (!isMounted || !mapInstanceRef.current) return;
+        try {
+          map.invalidateSize({ pan: false });
+        } catch {}
       }, 400);
     });
 
     // ResizeObserver modaalille
     const observer = new ResizeObserver(() => {
-      map.invalidateSize();
+      if (!isMounted || !mapInstanceRef.current) return;
+      if (mapContainerRef.current && mapContainerRef.current.clientWidth > 0 && mapContainerRef.current.clientHeight > 0) {
+        try {
+          map.invalidateSize({ pan: false });
+        } catch {}
+      }
     });
     if (mapContainerRef.current) {
       observer.observe(mapContainerRef.current);
     }
 
     return () => {
+      isMounted = false;
+      if (t1) clearTimeout(t1);
+      if (t2) clearTimeout(t2);
       observer.disconnect();
-      map.remove();
+      try {
+        map.stop();
+        map.remove();
+      } catch {}
       mapInstanceRef.current = null;
     };
   }, [drive]);

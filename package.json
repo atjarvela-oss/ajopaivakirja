@@ -3,7 +3,7 @@
   "author": "Ari Järvelä <atjarvela@gmail.com>",
   "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
-  "version": "1.20260908.1236",
+  "version": "1.20260908.1245",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
