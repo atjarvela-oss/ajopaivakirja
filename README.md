@@ -76,3 +76,22 @@ Syntynyt `.apk`-tiedosto voidaan asentaa suoraan opettajan puhelimeen!
 - `src/services/driveBackup.ts`: Google Drive -varmuuskopiopalvelu ja palautus.
 - `src/services/environmentClassifier.ts`: Ajoympäristön automaattinen tunnistusalgoritmi.
 - `src/components/`: Käyttöliittymäkomponentit (ajotilan GPS-seuranta, Leaflet-kartta, taulukko, yhteenvedot).
+
+---
+
+## Valmistaja ja tekijänoikeudet
+
+- **Valmistaja / Kehittäjä:** Ari Järvelä (`atjarvela-oss`)
+- **Yhteystiedot:** atjarvela@gmail.com
+- **GitHub:** [https://github.com/atjarvela-oss/ajopaivakirja](https://github.com/atjarvela-oss/ajopaivakirja)
+
+---
+
+## Lisenssi ja käyttöoikeus (License)
+
+Copyright (c) 2026 Ari Järvelä. Kaikki oikeudet pidätetään kaupallisen käytön osalta.
+
+Tämä sovellus on vapaasti käytettävissä, muokattavissa ja jaettavissa henkilökohtaiseen, opetukselliseen ja ei-kaupalliseen käyttöön.
+
+**Sovellusta, sen koodia tai sen osia ei saa ottaa osaksi kaupallista sovellusta, tuotetta tai palvelua ilman tekijänoikeuden haltijan (Ari Järvelä) etukäteistä kirjallista lupaa.** Katso tarkemmat ehdot tiedostosta [`LICENSE.md`](LICENSE.md).
+

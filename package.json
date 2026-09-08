@@ -1,7 +1,9 @@
 {
-  "name": "ajop-iv-kirja",
+  "name": "ajopaivakirja",
+  "author": "Ari Järvelä <atjarvela@gmail.com>",
+  "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

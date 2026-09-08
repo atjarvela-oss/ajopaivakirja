@@ -307,7 +307,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               Sovelluksen tiedot ja valmistaja
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Yhteystiedot ja versiohistoria
+              Yhteystiedot, tekijänoikeudet ja versiohistoria
             </p>
           </div>
         </div>
@@ -315,9 +315,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         <div className="space-y-3 text-xs sm:text-sm">
           <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800">
             <span className="text-slate-500 dark:text-slate-400">Valmistaja / Kehittäjä</span>
+            <span className="font-bold text-slate-900 dark:text-white">Ari Järvelä</span>
+          </div>
+
+          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800">
+            <span className="text-slate-500 dark:text-slate-400">Yhteydenotot</span>
             <a 
               href="mailto:atjarvela@gmail.com"
-              className="font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center space-x-1"
+              className="font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center space-x-1"
             >
               <Mail className="w-3.5 h-3.5" />
               <span>atjarvela@gmail.com</span>
@@ -332,6 +337,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800">
             <span className="text-slate-500 dark:text-slate-400">Lomakemalli</span>
             <span className="font-semibold text-slate-900 dark:text-white">Opetusluvan opetuskortti</span>
+          </div>
+
+          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800">
+            <span className="text-slate-500 dark:text-slate-400">Käyttöoikeus / Lisenssi</span>
+            <span className="font-semibold text-emerald-700 dark:text-emerald-400 text-right">
+              Non-Commercial (Ei-kaupallinen)
+            </span>
           </div>
 
           <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800">
