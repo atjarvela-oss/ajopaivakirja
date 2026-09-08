@@ -42,8 +42,9 @@ jobs:
 
       - name: Käännä debug APK
         run: |
+          rm -f android/local.properties
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Kopioi APK pääkansioon
         run: cp android/app/build/outputs/apk/debug/app-debug.apk ajopaivakirja.apk
