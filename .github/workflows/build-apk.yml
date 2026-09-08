@@ -15,10 +15,10 @@ jobs:
       - name: Hae koodikanta
         uses: actions/checkout@v4
 
-      - name: Asenna Node.js
+      - name: Asenna Node.js (Node 22 vaaditaan Capacitor CLI:lle)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Asenna Java (JDK 17)
@@ -26,6 +26,7 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '17'
+          cache: 'gradle'
 
       - name: Asenna riippuvuudet
         run: npm ci

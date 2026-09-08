@@ -8,7 +8,7 @@ import path from 'path'
 // Luetaan automaattinen build-versio version.json -tiedostosta
 let appVersion = '1.0.0'
 try {
-  const versionData = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'version.json'), 'utf8'))
+  const versionData = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'version.json'), 'utf8'))
   if (versionData.version) {
     appVersion = versionData.version
   }
