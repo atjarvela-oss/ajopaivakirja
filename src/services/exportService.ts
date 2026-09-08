@@ -1,35 +1,101 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { toPng } from 'html-to-image';
-import type { DriveSession, OverallStats } from '../types';
-import { ENVIRONMENT_CONFIG } from './environmentClassifier';
+import { Share } from '@capacitor/share';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Capacitor } from '@capacitor/core';
+import type { DriveSession, OverallStats, TeachingInfo } from '../types';
 
 /**
- * Jakaa tiedoston Androidin järjestelmäjakovalikkoon (tai lataa selaimessa)
+ * Muuntaa Blob-objektin Base64-merkkijonoksi (ilman data-URL etuliitettä)
  */
-export async function shareOrDownloadFile(file: File, fallbackFilename: string, blob: Blob) {
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(',')[1];
+      resolve(base64);
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Jakaa tiedoston Androidin järjestelmäjakovalikkoon (Google Drive, WhatsApp, Tiedostot)
+ * tai lataa selaimessa
+ */
+export async function shareOrDownloadFile(
+  blob: Blob,
+  filename: string,
+  mimeType: string,
+  dialogTitle = 'Jaa tai tallenna Google Driveen'
+): Promise<void> {
+  const isNative = Capacitor.isNativePlatform();
+
+  if (isNative) {
     try {
-      await navigator.share({
-        title: file.name,
+      const base64Data = await blobToBase64(blob);
+
+      // Tallennetaan laitteen Cache-kansioon
+      const writeResult = await Filesystem.writeFile({
+        path: filename,
+        data: base64Data,
+        directory: Directory.Cache,
+      });
+
+      // Tallennetaan myös Documents-kansioon pysyväksi laitevarmuuskopioksi
+      try {
+        await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Documents,
+        });
+      } catch {
+        // Ignored if permissions restrict Documents directory on some Android versions
+      }
+
+      // Avataan Androidin natiivi jako (jossa Google Drive, WhatsApp jne.)
+      await Share.share({
+        title: filename,
         text: 'Opetusluvan ajopäiväkirja',
-        files: [file],
+        url: writeResult.uri,
+        dialogTitle: dialogTitle,
       });
       return;
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        console.warn('Jako epäonnistui, ladataan tiedosto:', err);
-      } else {
-        return; // Käyttäjä peruutti jaon
+      const msg = (err?.message || '').toLowerCase();
+      if (msg.includes('cancel') || msg.includes('abort') || msg.includes('dismiss')) {
+        return; // Käyttäjä sulki jakovalikon
       }
+      console.warn('Capacitor Share epäonnistui:', err);
+      return;
     }
   }
 
-  // Fallback: Suora lataus tiedostona
+  // Web / Fallback
+  if (navigator.share && navigator.canShare) {
+    try {
+      const file = new File([blob], filename, { type: mimeType });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: filename,
+          text: 'Opetusluvan ajopäiväkirja',
+          files: [file],
+        });
+        return;
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      console.warn('Web Share epäonnistui, ladataan tiedostona:', err);
+    }
+  }
+
+  // Selainlataus (Aina varma fallback)
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = fallbackFilename;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -37,14 +103,13 @@ export async function shareOrDownloadFile(file: File, fallbackFilename: string, 
 }
 
 /**
- * Luo virallisen A4 PDF -ajopäiväkirjan Traficom/Ajovarma -vaatimusten mukaisesti
+ * Luo virallisen Traficom E505sv Opetuskortin mukaisen PDF-tiedoston
  */
-export async function exportDrivesToPdf(
+export async function exportTraficomPdf(
   drives: DriveSession[],
   stats: OverallStats,
-  studentName = 'Opetuslupaoppilas',
-  teacherName = 'Opettaja'
-) {
+  teachingInfo: TeachingInfo
+): Promise<void> {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -52,180 +117,225 @@ export async function exportDrivesToPdf(
   });
 
   const pageWidth = doc.internal.pageSize.getWidth();
-  const todayStr = new Date().toLocaleDateString('fi-FI');
-
-  // 1. Otsikkoalue
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(30, 41, 59); // Slate-800
-  doc.text('OPETUSLUVAN AJOPÄIVÄKIRJA', 14, 20);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(100, 116, 139); // Slate-500
-  doc.text('Kuljettajaopetuksen ajokertojen ja ajoympäristöjen virallinen erittely', 14, 26);
-  doc.text(`Luotu: ${todayStr}`, pageWidth - 14, 26, { align: 'right' });
-
-  // Vaakaviiva
-  doc.setDrawColor(203, 213, 225);
-  doc.line(14, 29, pageWidth - 14, 29);
-
-  // 2. Osapuolten tiedot
-  doc.setFontSize(10);
-  doc.setTextColor(51, 65, 85);
-  doc.text(`Oppilas: ${studentName}`, 14, 36);
-  doc.text(`Opettaja: ${teacherName}`, 105, 36);
-
-  // 3. Yhteenvetolaatikko (Tunnit & Ajoympäristöt)
-  const totalHours = (stats.totalDurationSeconds / 3600).toFixed(1);
-  const maantieHours = (stats.byEnvironment.maantie.durationSeconds / 3600).toFixed(1);
-  const taajamaHours = (stats.byEnvironment.taajama.durationSeconds / 3600).toFixed(1);
-  const kaupunkiHours = (stats.byEnvironment.kaupunki.durationSeconds / 3600).toFixed(1);
-  const parkHours = (stats.byEnvironment.pysakointi.durationSeconds / 3600).toFixed(1);
-
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(14, 41, pageWidth - 28, 26, 3, 3, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(14, 41, pageWidth - 28, 26, 3, 3, 'D');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(15, 23, 42);
-  doc.text('OPETUSTUNTIEN YHTEENVETO', 18, 48);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(71, 85, 105);
-
-  const col1X = 18;
-  const col2X = 75;
-  const col3X = 135;
-
-  doc.text(`Ajoaika yhteensä: ${totalHours} h (${stats.totalDrives} ajokertaa)`, col1X, 55);
-  doc.text(`Ajettu matka: ${stats.totalDistanceKm} km`, col1X, 61);
-
-  doc.text(`• Maantie / Moottoritie: ${maantieHours} h (${stats.byEnvironment.maantie.distanceKm} km)`, col2X, 55);
-  doc.text(`• Taajama (40-60 km/h): ${taajamaHours} h (${stats.byEnvironment.taajama.distanceKm} km)`, col2X, 61);
-
-  doc.text(`• Kaupunki / Keskusta: ${kaupunkiHours} h (${stats.byEnvironment.kaupunki.distanceKm} km)`, col3X, 55);
-  doc.text(`• Pysäköinti / Käsittely: ${parkHours} h (${stats.byEnvironment.pysakointi.distanceKm} km)`, col3X, 61);
-
-  // 4. Ajokertojen Taulukko
-  const tableData = drives.map((d, index) => {
-    const sDate = new Date(d.startTime);
-    const eDate = new Date(d.endTime);
-    const pvm = sDate.toLocaleDateString('fi-FI');
-    const kellonaika = `${sDate.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' })} - ${eDate.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' })}`;
-    const kesto = `${Math.round(d.durationSeconds / 60)} min\n(${(d.durationSeconds / 3600).toFixed(1)} h)`;
-    const matka = `${d.distanceKm} km`;
-    const ymparisto = ENVIRONMENT_CONFIG[d.environment.primary]?.label.split(' / ')[0] || d.environment.primary;
-    const aiheet = d.notes ? `${d.notes}${d.teacherNotes ? '\nOpettaja: ' + d.teacherNotes : ''}` : '-';
-
-    return [
-      (index + 1).toString(),
-      pvm,
-      kellonaika,
-      kesto,
-      matka,
-      ymparisto,
-      aiheet,
-    ];
-  });
-
-  autoTable(doc, {
-    startY: 72,
-    head: [['#', 'Päivämäärä', 'Aika', 'Kesto', 'Matka', 'Ajoympäristö', 'Aiheet ja opettajan huomiot']],
-    body: tableData,
-    theme: 'grid',
-    styles: {
-      fontSize: 8,
-      cellPadding: 2.5,
-      textColor: [30, 41, 59],
-      lineColor: [226, 232, 240],
-      lineWidth: 0.2,
-    },
-    headStyles: {
-      fillColor: [37, 99, 235], // Blue-600
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      halign: 'left',
-    },
-    columnStyles: {
-      0: { cellWidth: 8, halign: 'center' },
-      1: { cellWidth: 20 },
-      2: { cellWidth: 26 },
-      3: { cellWidth: 18, halign: 'right' },
-      4: { cellWidth: 18, halign: 'right' },
-      5: { cellWidth: 28 },
-      6: { cellWidth: 'auto' },
-    },
-    didDrawPage: (data) => {
-      // Sivunumero
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.text(
-        `Sivu ${data.pageNumber}`,
-        pageWidth - 14,
-        doc.internal.pageSize.getHeight() - 8,
-        { align: 'right' }
-      );
-    },
-  });
-
-  // 5. Allekirjoitukset viimeisen sivun loppuun
-  const finalY = (doc as any).lastAutoTable.finalY + 14;
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  // Jos tila loppuu sivulta, lisätään sivu allekirjoituksille
-  if (finalY + 30 > pageHeight) {
-    doc.addPage();
-  }
+  // 1. Ylätunniste (Opetuskortti opetuslupalaisille)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.setTextColor(0, 0, 0);
+  doc.text('OPETUSKORTTI', 14, 18);
 
-  const signY = (finalY + 30 > pageHeight) ? 30 : finalY;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(60, 60, 60);
+  doc.text('Opetuslupaopetuksen ajopäiväkirja', 14, 22);
+  doc.text('Undervisningstillstånd körjournal', 14, 25.5);
 
-  doc.setDrawColor(71, 85, 105);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Opetuskortti opetuslupalaisille', pageWidth - 14, 18, { align: 'right' });
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8.5);
+  doc.setTextColor(70, 70, 70);
+  doc.text('Undervisningskort för den som har', pageWidth - 14, 22, { align: 'right' });
+  doc.text('beviljats undervisningstillstånd', pageWidth - 14, 25.5, { align: 'right' });
+
+  // 2. Osapuolten tiedot (Kehystetty laatikko täsmälleen kuin Traficom E505sv)
+  const boxTop = 29;
+  const boxHeight = 27;
+  const boxWidth = pageWidth - 28;
+
+  doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.3);
-  doc.line(14, signY + 15, 80, signY + 15);
-  doc.line(115, signY + 15, 185, signY + 15);
+  doc.rect(14, boxTop, boxWidth, boxHeight);
 
-  doc.setFontSize(9);
-  doc.setTextColor(51, 65, 85);
-  doc.text('Opettajan allekirjoitus ja nimenselvennys', 14, signY + 20);
-  doc.text('Oppilaan allekirjoitus ja nimenselvennys', 115, signY + 20);
+  // Vaakaviivat
+  doc.line(14, boxTop + 9, pageWidth - 14, boxTop + 9);
+  doc.line(14, boxTop + 18, pageWidth - 14, boxTop + 18);
 
-  // Tallennus ja Jako
+  // Pystyviivat
+  const ssnSplitX = 14 + boxWidth * 0.68;
+  doc.line(ssnSplitX, boxTop, ssnSplitX, boxTop + 18); // rivit 1 ja 2
+
+  const classSplitX = 14 + boxWidth * 0.48;
+  doc.line(classSplitX, boxTop + 18, classSplitX, boxTop + boxHeight); // rivi 3
+
+  // Kenttätekstit (Suomi / Ruotsi)
+  doc.setFontSize(6.5);
+  doc.setTextColor(80, 80, 80);
+  doc.setFont('helvetica', 'normal');
+
+  // Rivi 1: Oppilas
+  doc.text('Oppilaan nimi  Elevens namn', 16, boxTop + 3.5);
+  doc.text('Henkilötunnus  Personbeteckning', ssnSplitX + 2, boxTop + 3.5);
+
+  doc.setFontSize(8.5);
+  doc.setTextColor(0, 0, 0);
+  doc.setFont('helvetica', 'bold');
+  doc.text(teachingInfo.studentName || '-', 16, boxTop + 7.5);
+  doc.text(teachingInfo.studentSsn || '-', ssnSplitX + 2, boxTop + 7.5);
+
+  // Rivi 2: Opettaja
+  doc.setFontSize(6.5);
+  doc.setTextColor(80, 80, 80);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Opettajan nimi  Lärarens namn', 16, boxTop + 12.5);
+  doc.text('Henkilötunnus  Personbeteckning', ssnSplitX + 2, boxTop + 12.5);
+
+  doc.setFontSize(8.5);
+  doc.setTextColor(0, 0, 0);
+  doc.setFont('helvetica', 'bold');
+  doc.text(teachingInfo.teacherName || '-', 16, boxTop + 16.5);
+  doc.text(teachingInfo.teacherSsn || '-', ssnSplitX + 2, boxTop + 16.5);
+
+  // Rivi 3: Ajokorttiluokka & Aloituspvm
+  doc.setFontSize(6.5);
+  doc.setTextColor(80, 80, 80);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Haettava ajokorttiluokka  Körkortskategori', 16, boxTop + 21.5);
+  doc.text('Opetuksen aloituspvm  Undervisningen har inletts', classSplitX + 2, boxTop + 21.5);
+
+  doc.setFontSize(8.5);
+  doc.setTextColor(0, 0, 0);
+  doc.setFont('helvetica', 'bold');
+  doc.text(teachingInfo.licenseClass || 'B', 16, boxTop + 25.5);
+  doc.text(teachingInfo.startDate ? new Date(teachingInfo.startDate).toLocaleDateString('fi-FI') : '-', classSplitX + 2, boxTop + 25.5);
+
+  // 3. Ajo-opetus -väliotsikko
+  const sectionY = boxTop + boxHeight + 6;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Ajo-opetus  Körundervisning', 14, sectionY);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(40, 40, 40);
+  doc.text('Ajotunnin pituus 50 min  Körlektionens längd 50 min', 14, sectionY + 4.5);
+
+  // 4. Taulukko (Ajotunnit 1..22+)
+  // Varmistetaan vähintään 22 riviä kuten virallisessa Traficom-lomakkeessa
+  const totalRows = Math.max(22, drives.length);
+  const tableRows = [];
+
+  // Järjestetään ajot aikajärjestykseen
+  const sortedDrives = [...drives].sort(
+    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+  );
+
+  for (let i = 0; i < totalRows; i++) {
+    const drive = sortedDrives[i];
+    const lessonNumber = (i + 1).toString();
+
+    if (drive) {
+      const sDate = new Date(drive.startTime);
+      const eDate = drive.endTime ? new Date(drive.endTime) : new Date(sDate.getTime() + drive.durationSeconds * 1000);
+      const pvm = sDate.toLocaleDateString('fi-FI');
+      const startKlo = sDate.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
+      const endKlo = eDate.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
+      const durationMin = Math.round(drive.durationSeconds / 60);
+      const klo = `${startKlo}–${endKlo}\n(${durationMin} min)`;
+      const aihe = `${drive.topicCode || 'A'}${drive.notes ? ' - ' + drive.notes : ''}`;
+      const opettaja = teachingInfo.teacherName || 'Opettaja';
+
+      tableRows.push([lessonNumber, pvm, klo, aihe, opettaja]);
+    } else {
+      // Tyhjä rivi lomakkeen pohjaan
+      tableRows.push([lessonNumber, '', '', '', '']);
+    }
+  }
+
+  autoTable(doc, {
+    startY: sectionY + 6.5,
+    margin: { left: 14, right: 14, top: 20, bottom: 26 },
+    head: [[
+      'Ajotunti\nKörlektion',
+      'Pvm\nDatum',
+      'Klo*\nKl*',
+      'Aihe\nÄmne',
+      'Opettaja\nLärare'
+    ]],
+    body: tableRows,
+    theme: 'plain',
+    styles: {
+      fontSize: 8,
+      cellPadding: 1.8,
+      textColor: [0, 0, 0],
+      lineColor: [0, 0, 0],
+      lineWidth: 0.2,
+      minCellHeight: 6,
+    },
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+      lineColor: [0, 0, 0],
+      lineWidth: 0.3,
+      fontSize: 7.5,
+    },
+    columnStyles: {
+      0: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },
+      1: { cellWidth: 24 },
+      2: { cellWidth: 26, halign: 'center' },
+      3: { cellWidth: 'auto' },
+      4: { cellWidth: 36 },
+    },
+    didDrawPage: (data) => {
+      // Jos taulukko jatkuu sivulle 2 tai pidemmälle, piirretään selkeä jatkosivun ylätunniste
+      if (data.pageNumber > 1) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.setTextColor(0, 0, 0);
+        doc.text('OPETUSKORTTI (Jatkosivu)  Undervisningskort', 14, 11);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(60, 60, 60);
+        const student = teachingInfo.studentName || 'Oppilas';
+        const teacher = teachingInfo.teacherName || 'Opettaja';
+        const ssn = teachingInfo.studentSsn ? `(${teachingInfo.studentSsn})` : '';
+        doc.text(`Oppilas: ${student} ${ssn}   •   Opettaja: ${teacher}   •   Luokka: ${teachingInfo.licenseClass || 'B'}`, 14, 15.5);
+
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.2);
+        doc.line(14, 17.5, pageWidth - 14, 17.5);
+      }
+    },
+  });
+
+  // 5. Alatunniste (Selitteet, kokonaistunnit ja sivunumerointi jokaiselle sivulle)
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    const footerY = pageHeight - 16;
+    doc.setFontSize(7.5);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Ajo-opetuksen aiheet  Ämnen för körundervisningen:', 14, footerY);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text('K = käsittelyopetus  manövreringsundervisning', 14, footerY + 3.8);
+    doc.text('A = taajama-ajo  körning i tätort', 14, footerY + 7.2);
+    doc.text('B = maantieajo  landsvägskörning', 14, footerY + 10.6);
+
+    doc.text('*) Ajotunnin aika ja kesto / Körlektionens tid och längd', pageWidth - 14, footerY, { align: 'right' });
+    doc.text(`Ajotunteja yht: ${stats.lessonHours50Min} h (50 min) • Matka yht: ${stats.totalDistanceKm} km`, pageWidth - 14, footerY + 4, { align: 'right' });
+
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 100, 100);
+    if (totalPages > 1) {
+      doc.text(`Sivu ${p} / ${totalPages} • Opetusluvan opetuskortti (E505sv)`, pageWidth - 14, footerY + 10, { align: 'right' });
+    } else {
+      doc.text('Opetusluvan opetuskortti / Undervisningskort (E505sv)', pageWidth - 14, footerY + 10, { align: 'right' });
+    }
+  }
+
+  // Luodaan tiedosto ja jaetaan
   const pdfBlob = doc.output('blob');
-  const filename = `ajopaivakirja_${new Date().toISOString().slice(0, 10)}.pdf`;
-  const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+  const filename = `opetuskortti_${new Date().toISOString().slice(0, 10)}.pdf`;
 
-  await shareOrDownloadFile(file, filename, pdfBlob);
-}
-
-/**
- * Ottaa korkealaatuisen PNG-kuvan valitusta HTML-elementistä (esim. ajopäiväkirjasta)
- */
-export async function exportElementToPng(elementId: string, filenamePrefix = 'ajopaivakirja'): Promise<void> {
-  const element = document.getElementById(elementId);
-  if (!element) {
-    alert('Exportattavaa näkymää ei löytynyt.');
-    return;
-  }
-
-  try {
-    const dataUrl = await toPng(element, {
-      quality: 0.95,
-      pixelRatio: 2, // Korkea resoluutio
-      backgroundColor: '#ffffff',
-    });
-
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    const filename = `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.png`;
-    const file = new File([blob], filename, { type: 'image/png' });
-
-    await shareOrDownloadFile(file, filename, blob);
-  } catch (error) {
-    console.error('PNG-vienti epäonnistui:', error);
-    alert('Kuvatiedoston luonti epäonnistui.');
-  }
+  await shareOrDownloadFile(pdfBlob, filename, 'application/pdf', 'Tallenna PDF Google Driveen tai jaa');
 }

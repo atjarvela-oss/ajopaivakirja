@@ -1,34 +1,56 @@
 import { useState, useEffect } from 'react';
-import { Navbar } from './components/Navbar';
-import { StatsOverview } from './components/StatsOverview';
+import { Navbar, type ActiveTab } from './components/Navbar';
+import { BottomNav } from './components/BottomNav';
+import { SummaryTab } from './components/SummaryTab';
 import { DriveTracker } from './components/DriveTracker';
-import { DriveTable } from './components/DriveTable';
+import { TraficomCard } from './components/TraficomCard';
+import { SettingsTab } from './components/SettingsTab';
 import { DriveMapModal } from './components/DriveMapModal';
 import { ManualDriveModal } from './components/ManualDriveModal';
-import type { DriveSession, OverallStats } from './types';
-import { getLocalDrives, calculateOverallStats } from './services/localDb';
-import { exportDrivesToPdf, exportElementToPng } from './services/exportService';
+import type { DriveSession, OverallStats, TeachingInfo } from './types';
+import { 
+  getLocalDrives, 
+  calculateOverallStats, 
+  getTeachingInfo, 
+  saveTeachingInfo, 
+  deleteLocalDrive 
+} from './services/localDb';
+import { exportTraficomPdf } from './services/exportService';
 import { backupToGoogleDrive, restoreFromBackupFile } from './services/driveBackup';
-import { Car, CheckCircle2, AlertCircle } from 'lucide-react';
+import { getStoredTheme, applyTheme, type ThemeMode } from './services/themeService';
+import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { UpdateNotification } from './components/UpdateNotification';
+import { checkForAppUpdate, type UpdateCheckResult } from './services/updateService';
 
 export function App() {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('yhteenveto');
+  const [isDriving, setIsDriving] = useState(false);
+  const [isDrivePaused, setIsDrivePaused] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState<ThemeMode>(getStoredTheme());
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateCheckResult | null>(null);
+  
   const [drives, setDrives] = useState<DriveSession[]>([]);
+  const [teachingInfo, setTeachingInfo] = useState<TeachingInfo>(getTeachingInfo());
   const [stats, setStats] = useState<OverallStats>({
     totalDrives: 0,
     totalDurationSeconds: 0,
     totalDistanceKm: 0,
+    lessonHours50Min: 0,
     byEnvironment: {
       maantie: { count: 0, durationSeconds: 0, distanceKm: 0 },
       taajama: { count: 0, durationSeconds: 0, distanceKm: 0 },
       kaupunki: { count: 0, durationSeconds: 0, distanceKm: 0 },
       pysakointi: { count: 0, durationSeconds: 0, distanceKm: 0 },
     },
+    byTopicCode: {
+      K: { count: 0, durationSeconds: 0 },
+      A: { count: 0, durationSeconds: 0 },
+      B: { count: 0, durationSeconds: 0 },
+    },
   });
 
   const [selectedDriveForMap, setSelectedDriveForMap] = useState<DriveSession | null>(null);
   const [showManualModal, setShowManualModal] = useState(false);
-  const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [isExportingPng, setIsExportingPng] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -36,49 +58,76 @@ export function App() {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  // Teeman alustus ja vaihto
+  useEffect(() => {
+    applyTheme(currentTheme);
+  }, [currentTheme]);
+
+  const handleThemeChange = (newTheme: ThemeMode) => {
+    setCurrentTheme(newTheme);
+    applyTheme(newTheme);
+    showToast(
+      newTheme === 'dark' 
+        ? 'Tumma teema käytössä' 
+        : newTheme === 'light' 
+        ? 'Vaalea teema käytössä' 
+        : 'Järjestelmän teema käytössä'
+    );
+  };
+
   const refreshDrives = () => {
     const list = getLocalDrives();
     setDrives(list);
     setStats(calculateOverallStats(list));
+    setTeachingInfo(getTeachingInfo());
   };
 
   useEffect(() => {
     refreshDrives();
+
+    // Tarkistetaan GitHub-päivitykset taustalla 2 sekunnin kuluttua käynnistyksestä
+    const updateTimer = setTimeout(() => {
+      checkForAppUpdate()
+        .then((res) => {
+          if (res.hasUpdate) {
+            setAvailableUpdate(res);
+          }
+        })
+        .catch(() => {});
+    }, 2000);
+
+    return () => clearTimeout(updateTimer);
   }, []);
+
+  const handleUpdateTeachingInfo = (info: TeachingInfo) => {
+    saveTeachingInfo(info);
+    setTeachingInfo(info);
+    showToast('Oppilastiedot päivitetty onnistuneesti!');
+  };
+
+  const handleDeleteDrive = (id: string) => {
+    deleteLocalDrive(id);
+    refreshDrives();
+    showToast('Ajokerta poistettu.');
+  };
 
   const handleExportPdf = async () => {
     try {
-      setIsExportingPdf(true);
-      await exportDrivesToPdf(drives, stats);
-      showToast('PDF-ajopäiväkirja luotu onnistuneesti!');
+      await exportTraficomPdf(drives, stats, teachingInfo);
+      showToast('Opetuskortti-PDF luotu onnistuneesti!');
     } catch (e: any) {
       console.error(e);
-      showToast('PDF-luonti epäonnistui: ' + e.message, 'error');
-    } finally {
-      setIsExportingPdf(false);
-    }
-  };
-
-  const handleExportPng = async () => {
-    try {
-      setIsExportingPng(true);
-      await exportElementToPng('driving-log-table-container', 'ajopaivakirja');
-      showToast('Ajopäiväkirjan kuva (PNG) luotu onnistuneesti!');
-    } catch (e: any) {
-      console.error(e);
-      showToast('PNG-luonti epäonnistui: ' + e.message, 'error');
-    } finally {
-      setIsExportingPng(false);
+      showToast('PDF-luonti epäonnistui: ' + (e?.message || e), 'error');
     }
   };
 
   const handleBackupDrive = async () => {
     try {
-      await backupToGoogleDrive(drives);
+      await backupToGoogleDrive(drives, teachingInfo);
       showToast('Valitse "Tallenna Google Driveen" avautuvasta jakovalikosta!');
     } catch (e: any) {
       console.error(e);
-      showToast('Varmuuskopiointi epäonnistui: ' + e.message, 'error');
+      showToast('Varmuuskopiointi epäonnistui: ' + (e?.message || e), 'error');
     }
   };
 
@@ -92,17 +141,34 @@ export function App() {
     }
   };
 
+  const handleDriveSaved = async () => {
+    refreshDrives();
+    setActiveTab('raportti'); // Siirrytään suoraan raporttiin tallennuksen jälkeen
+
+    // Automaattinen Google Drive -varmuuskopiointi jokaisen ajon jälkeen (oletus: päällä)
+    const autoBackup = localStorage.getItem('opetuslupa_auto_backup') !== 'false';
+    if (autoBackup) {
+      try {
+        const latestDrives = getLocalDrives();
+        showToast('Ajokerta tallennettu! Varmuuskopioidaan Google Driveen...');
+        await backupToGoogleDrive(latestDrives, teachingInfo);
+      } catch (err: any) {
+        console.warn('Automaattinen varmuuskopiointi keskeytyi:', err);
+      }
+    } else {
+      showToast('Ajokerta tallennettu onnistuneesti!');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased transition-colors">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased transition-colors pb-16 sm:pb-0">
       
-      {/* Yläpalkki (Puhdas Android-opettajanäkymä) */}
+      {/* Yläpalkki (Siisti, ilman ylimääräisiä nappeja ja tekstejä) */}
       <Navbar
-        onExportPdf={handleExportPdf}
-        onExportPng={handleExportPng}
-        onBackupDrive={handleBackupDrive}
-        onRestoreDrive={handleRestoreDrive}
-        isExportingPdf={isExportingPdf}
-        isExportingPng={isExportingPng}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        isDriving={isDriving}
+        isPaused={isDrivePaused}
       />
 
       {/* Ilmoitusviesti / Toast */}
@@ -123,49 +189,68 @@ export function App() {
         </div>
       )}
 
-      {/* Pääsisältö */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
+      {/* Pääsisältö välilehtien mukaan */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
         
-        {/* Yhteenvetokortit ja ajoympäristöjakauma */}
-        <section>
-          <StatsOverview stats={stats} />
-        </section>
+        {/* Välilehti 1: Yhteenveto */}
+        {activeTab === 'yhteenveto' && (
+          <SummaryTab
+            stats={stats}
+            teachingInfo={teachingInfo}
+            recentDrives={drives}
+            onNavigateToDrive={() => setActiveTab('ajo')}
+            onNavigateToReport={() => setActiveTab('raportti')}
+            onOpenManualEntry={() => setShowManualModal(true)}
+            onSelectDriveForMap={(drive) => setSelectedDriveForMap(drive)}
+          />
+        )}
 
-        {/* Ajotila ja Reaaliaikainen GPS-seuranta */}
-        <section className="no-print">
+        {/* Välilehti 2: Ajo (Pidetään DOM:ssa piilotettuna jotta GPS-seuranta ei katkea välilehteä vaihdettaessa) */}
+        <div className={activeTab === 'ajo' ? 'block' : 'hidden'}>
           <DriveTracker
-            onDriveSaved={refreshDrives}
+            isActiveTab={activeTab === 'ajo'}
+            onDriveSaved={handleDriveSaved}
+            onOpenManualEntry={() => setShowManualModal(true)}
+            onDrivingStatusChange={(driving, paused) => {
+              setIsDriving(driving);
+              setIsDrivePaused(!!paused);
+            }}
+          />
+        </div>
+
+        {/* Välilehti 3: Raportti (Opetuskortti) */}
+        {activeTab === 'raportti' && (
+          <TraficomCard
+            drives={drives}
+            teachingInfo={teachingInfo}
+            onUpdateTeachingInfo={handleUpdateTeachingInfo}
+            onSelectDrive={(drive) => setSelectedDriveForMap(drive)}
+            onDeleteDrive={handleDeleteDrive}
+            onExportPdf={handleExportPdf}
             onOpenManualEntry={() => setShowManualModal(true)}
           />
-        </section>
+        )}
 
-        {/* Taulukkotyylinen listaus ajokerroista */}
-        <section>
-          <DriveTable
-            drives={drives}
-            onSelectDrive={(drive) => setSelectedDriveForMap(drive)}
-            onRefresh={refreshDrives}
-            onExportPdf={handleExportPdf}
-            onExportPng={handleExportPng}
+        {/* Välilehti 4: Asetukset */}
+        {activeTab === 'asetukset' && (
+          <SettingsTab
+            currentTheme={currentTheme}
+            onThemeChange={handleThemeChange}
+            onBackupDrive={handleBackupDrive}
+            onRestoreDrive={handleRestoreDrive}
+            drivesCount={drives.length}
           />
-        </section>
+        )}
 
       </main>
 
-      {/* Alatunniste */}
-      <footer className="no-print border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-6 text-center text-xs text-slate-500 dark:text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center space-x-2">
-            <Car className="w-4 h-4 text-blue-600" />
-            <span className="font-semibold text-slate-700 dark:text-slate-300">Opetuslupa Ajopäiväkirja</span>
-            <span>•</span>
-            <span>Puhdas paikallinen Android-sovellus</span>
-          </div>
-          <div>
-            Kaikki ajotiedot säilyvät puhelimessasi. Varmuuskopioi säännöllisesti Google Driveen yläpalkin painikkeella.
-          </div>
-        </div>
-      </footer>
+      {/* Alapalkki (Mobiililaitteille helpottamaan yhden käden käyttöä puhelimella) */}
+      <BottomNav
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        isDriving={isDriving}
+        isPaused={isDrivePaused}
+      />
 
       {/* Modaalit */}
       <DriveMapModal
@@ -177,7 +262,13 @@ export function App() {
       <ManualDriveModal
         isOpen={showManualModal}
         onClose={() => setShowManualModal(false)}
-        onDriveSaved={refreshDrives}
+        onDriveSaved={handleDriveSaved}
+      />
+
+      {/* Päivityshoksautus / Ilmoitus uuden version saapuessa */}
+      <UpdateNotification
+        updateInfo={availableUpdate}
+        onDismiss={() => setAvailableUpdate(null)}
       />
 
     </div>

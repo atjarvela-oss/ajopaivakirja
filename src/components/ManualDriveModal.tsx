@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, PlusCircle } from 'lucide-react';
-import type { DriveSession, EnvironmentType } from '../types';
-import { ENVIRONMENT_CONFIG } from '../services/environmentClassifier';
+import type { DriveSession, EnvironmentType, TraficomTopicCode } from '../types';
+import { ENVIRONMENT_CONFIG, mapEnvironmentToTraficomCode, TRAFICOM_TOPIC_CONFIG } from '../services/environmentClassifier';
 import { saveLocalDrive } from '../services/localDb';
 
 interface ManualDriveModalProps {
@@ -21,6 +21,7 @@ export const ManualDriveModal: React.FC<ManualDriveModalProps> = ({
   const [endTime, setEndTime] = useState('14:45');
   const [distanceKm, setDistanceKm] = useState('25');
   const [environment, setEnvironment] = useState<EnvironmentType>('taajama');
+  const [topicCode, setTopicCode] = useState<TraficomTopicCode>('A');
   const [notes, setNotes] = useState('');
   const [teacherNotes, setTeacherNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -54,6 +55,7 @@ export const ManualDriveModal: React.FC<ManualDriveModalProps> = ({
         distanceKm: dist,
         avgSpeedKmH: avgSpeed,
         maxSpeedKmH: Number((avgSpeed * 1.3).toFixed(1)),
+        topicCode,
         environment: {
           primary: environment,
           distribution: distObj,
@@ -149,11 +151,44 @@ export const ManualDriveModal: React.FC<ManualDriveModalProps> = ({
 
           <div>
             <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Opetusaihe
+            </label>
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {(['K', 'A', 'B'] as TraficomTopicCode[]).map((code) => {
+                const cfg = TRAFICOM_TOPIC_CONFIG[code];
+                const isSelected = topicCode === code;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => setTopicCode(code)}
+                    className={`p-2 rounded-xl border text-center transition flex flex-col items-center justify-center ${
+                      isSelected
+                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/50 text-blue-900 dark:text-blue-100 ring-2 ring-blue-500/20 font-bold'
+                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <span className="text-sm font-extrabold">{code}</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                      {cfg.label.split(' ')[0]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Pääasiallinen ajoympäristö
             </label>
             <select
               value={environment}
-              onChange={(e) => setEnvironment(e.target.value as EnvironmentType)}
+              onChange={(e) => {
+                const val = e.target.value as EnvironmentType;
+                setEnvironment(val);
+                setTopicCode(mapEnvironmentToTraficomCode(val));
+              }}
               className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden"
             >
               {(Object.keys(ENVIRONMENT_CONFIG) as EnvironmentType[]).map((key) => (

@@ -2,7 +2,7 @@
 
 Yksinkertainen, nopea ja paikallisesti toimiva Android-ajopäiväkirja opetuslupaopetukseen. Suunniteltu suoraan opettajan puhelimeen ilman käyttäjätunnuksia, kirjautumisia tai pilvitietokantoja.
 
-Sovellus täyttää Traficomin ja Ajovarman vaatimukset opetusluvalla suoritettavien ajotuntien dokumentoinnille, ajoympäristöjen erittelylle sekä allekirjoituksille.
+Sovellus toimii helppokäyttöisenä opetuskorttina opetusluvalla suoritettavien ajotuntien dokumentoinnille, ajoympäristöjen erittelylle sekä opetuksen seurannalle.
 
 ---
 
@@ -12,19 +12,18 @@ Sovellus täyttää Traficomin ja Ajovarman vaatimukset opetusluvalla suoritetta
    - Sovellus aukeaa välittömästi ilman rekisteröinti- tai kirjautumisseinää.
    - Kaikki ajokerrat, reitit ja tilastot tallentuvat 100 % paikallisesti puhelimen tallennustilaan (offline-first).
 
-2. **Varmuuskopiointi Google Driveen**:
-   - Yhdellä painalluksella ("Google Drive") sovellus luo täyden varmuuskopiotiedoston (`ajopaivakirja_backup_YYYY-MM-DD.json`) ja avaa Androidin järjestelmäjakovalikon, josta voi valita suoraan **Tallenna Google Driveen**.
+2. **Automaattinen varmuuskopiointi Google Driveen**:
+   - Sovellus varmuuskopioi ajopäiväkirjan automaattisesti jokaisen tallennetun ajon jälkeen (`ajopaivakirja_backup_YYYY-MM-DD.json`).
+   - Avaa Androidin järjestelmäjakovalikon, josta voi valita **Tallenna Google Driveen**. Voidaan myös kytkeä pois tai käynnistää manuaalisesti asetuksista.
    - Varmuuskopion voi milloin tahansa palauttaa "Palauta"-painikkeella.
 
-3. **PDF- ja PNG-vienti**:
-   - **PDF-vienti**: Virallinen, valmiiksi muotoiltu A4-kokoinen ajopäiväkirja (otsikot, oppilas, opettaja, ajoympäristöyhteenveto, ajokertataulukko ja allekirjoitusviivat).
-   - **PNG-kuvavienti**: Korkearesoluutioinen kuva ajopäiväkirjataulukosta ja yhteenvedosta helppoon jakamiseen (esim. WhatsAppilla tai galleriaan tallentamiseksi).
+3. **PDF-vienti**:
+   - **PDF-vienti**: Selkeä, valmiiksi muotoiltu A4-kokoinen opetuskortti (oppilas- ja opettajatiedot, 50 min ajotuntilaskenta, K/A/B aihekoodit ja allekirjoitukset).
 
 4. **Ajan ja sijainnin tallennus (GPS)**:
    - Lähtöaika, lopetusaika, kesto sekuntikellolla.
    - Ajettu matka (km), hetkellinen nopeus (km/h) ja huippunopeus.
    - Interaktiivinen kartta (Leaflet + OpenStreetMap) reaaliaikaisella reittiviivalla.
-   - Sisäänrakennettu **ajosimulaattori**, jolla ajoa ja ajoympäristön arviointia voi kokeilla heti ilman ajamista.
 
 5. **Automaattinen ajoympäristön arviointi**:
    - Analysoi reaaliaikaisesti ajonopeuksia, pysähdyksiä ja liikkuma-aluetta:
@@ -73,7 +72,7 @@ Syntynyt `.apk`-tiedosto voidaan asentaa suoraan opettajan puhelimeen!
 
 - `android/`: Täydellinen natiivi Android Studio -projekti (Gradle, AndroidManifest, Java/Kotlin).
 - `src/services/localDb.ts`: Paikallinen tietokanta (IndexedDB / LocalStorage).
-- `src/services/exportService.ts`: PDF- ja PNG-viennin generointi (`jspdf`, `jspdf-autotable`, `html-to-image`).
+- `src/services/exportService.ts`: PDF-opetuskortin generointi (`jspdf`, `jspdf-autotable`).
 - `src/services/driveBackup.ts`: Google Drive -varmuuskopiopalvelu ja palautus.
 - `src/services/environmentClassifier.ts`: Ajoympäristön automaattinen tunnistusalgoritmi.
 - `src/components/`: Käyttöliittymäkomponentit (ajotilan GPS-seuranta, Leaflet-kartta, taulukko, yhteenvedot).

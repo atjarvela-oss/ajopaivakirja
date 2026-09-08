@@ -6,27 +6,44 @@ import {
   Gauge, 
   Timer, 
   MapPin, 
-  Sparkles, 
+  Sparkles,
+  CloudUpload, 
   Radio, 
   Save, 
-  X
+  X,
+  Pause,
+  PauseCircle
 } from 'lucide-react';
 import L from 'leaflet';
-import type { GeoPoint, DriveSession, EnvironmentType, DriveEnvironment } from '../types';
-import { classifyEnvironment, calculateDistanceKm, ENVIRONMENT_CONFIG } from '../services/environmentClassifier';
+import type { GeoPoint, DriveSession, EnvironmentType, DriveEnvironment, TraficomTopicCode } from '../types';
+import { classifyEnvironment, calculateDistanceKm, ENVIRONMENT_CONFIG, mapEnvironmentToTraficomCode, TRAFICOM_TOPIC_CONFIG } from '../services/environmentClassifier';
 import { saveLocalDrive } from '../services/localDb';
+import { startLocationWatcher, stopLocationWatcher, acquireWakeLock, releaseWakeLock } from '../services/trackingService';
 
 interface DriveTrackerProps {
   onDriveSaved: (drive: DriveSession) => void;
   onOpenManualEntry: () => void;
+  onDrivingStatusChange?: (isDriving: boolean, isPaused?: boolean) => void;
+  isActiveTab?: boolean;
 }
 
 export const DriveTracker: React.FC<DriveTrackerProps> = ({
   onDriveSaved,
   onOpenManualEntry,
+  onDrivingStatusChange,
+  isActiveTab = true,
 }) => {
   const [isDriving, setIsDriving] = useState(false);
-  const [isSimulating, setIsSimulating] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+
+  // Viitteet sulkeumien (closure) ajantasaisuuden varmistamiseksi taustapaikannuksessa ja ajastimissa
+  const isPausedRef = useRef(false);
+  const totalPausedMsRef = useRef(0);
+  const pauseStartTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    onDrivingStatusChange?.(isDriving, isPaused);
+  }, [isDriving, isPaused, onDrivingStatusChange]);
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [currentSpeed, setCurrentSpeed] = useState<number>(0);
@@ -43,6 +60,7 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveNotes, setSaveNotes] = useState('');
   const [selectedEnvOverride, setSelectedEnvOverride] = useState<EnvironmentType>('taajama');
+  const [selectedTopicCode, setSelectedTopicCode] = useState<TraficomTopicCode>('A');
   const [finalDriveData, setFinalDriveData] = useState<{
     startTime: Date;
     endTime: Date;
@@ -60,10 +78,8 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
   const polylineRef = useRef<L.Polyline | null>(null);
   const currentMarkerRef = useRef<L.CircleMarker | null>(null);
 
-  // Seurantaintervallit ja watchPosition id
+  // Seurantaintervalli
   const timerIntervalRef = useRef<any>(null);
-  const watchIdRef = useRef<number | null>(null);
-  const simulationIntervalRef = useRef<any>(null);
 
   // Alustetaan Leaflet-kartta
   useEffect(() => {
@@ -73,22 +89,29 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
       const defaultCenter: [number, number] = [60.1699, 24.9384]; // Helsinki
       const map = L.map(mapContainerRef.current, {
         center: defaultCenter,
-        zoom: 14,
+        zoom: 15,
         zoomControl: false,
       });
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
-        maxZoom: 19,
+      // Käytetään erittäin nopeaa ja luotettavaa CartoDB Voyager -karttapalvelua käyttäjän API-avaimella
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_2zol_1_eeae5b3125b861ead072afd6', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20,
+        crossOrigin: true,
+        keepBuffer: 6,
+        updateWhenIdle: false,
+        updateWhenZooming: true,
       }).addTo(map);
 
       const polyline = L.polyline([], {
         color: '#2563eb',
-        weight: 5,
-        opacity: 0.85,
+        weight: 6,
+        opacity: 0.9,
         lineJoin: 'round',
+        lineCap: 'round',
       }).addTo(map);
 
       const marker = L.circleMarker(defaultCenter, {
@@ -103,6 +126,28 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
       mapInstanceRef.current = map;
       polylineRef.current = polyline;
       currentMarkerRef.current = marker;
+
+      // Yritetään keskittää kartta käyttäjän nykyiseen sijaintiin heti avattaessa
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const userLoc: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+            map.setView(userLoc, 15);
+            marker.setLatLng(userLoc);
+            map.invalidateSize();
+          },
+          (err) => {
+            console.warn('Alkusijaintia ei saatu:', err);
+          },
+          { timeout: 8000, maximumAge: 60000 }
+        );
+      }
+
+      // Varmistetaan karttaruutujen täysi lataus alkulatauksessa
+      map.whenReady(() => {
+        setTimeout(() => map.invalidateSize(), 100);
+        setTimeout(() => map.invalidateSize(), 400);
+      });
     }
 
     return () => {
@@ -113,6 +158,42 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
       }
     };
   }, []);
+
+  // ResizeObserver: Päivittää kartan mitat välittömästi aina kun elementin koko muuttuu
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+    const observer = new ResizeObserver(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    });
+    observer.observe(mapContainerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // Päivitetään kartan koko aina kun välilehti aktivoituu
+  useEffect(() => {
+    if (isActiveTab && mapInstanceRef.current) {
+      const t1 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 60);
+      const t2 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 250);
+      const t3 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 600);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    }
+  }, [isActiveTab]);
+
+  // Päivitetään kartan koko kun ajotila muuttuu tai tilastopalkit ilmestyvät
+  useEffect(() => {
+    if (mapInstanceRef.current) {
+      const timer = setTimeout(() => {
+        mapInstanceRef.current?.invalidateSize();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [isDriving, isPaused]);
 
   // Päivitetään kartan reitti ja sijainti
   useEffect(() => {
@@ -133,19 +214,21 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
     mapInstanceRef.current.panTo(latest, { animate: true, duration: 0.5 });
   }, [routePoints]);
 
-  // Päivitetään ajoympäristön arvio reaaliajassa ajon aikana
+  // Päivitetään ajoympäristön arvio reaaliajassa ajon aikana (vain kun ajo ei ole tauolla)
   useEffect(() => {
-    if (isDriving && routePoints.length >= 2) {
+    if (isDriving && !isPaused && routePoints.length >= 2) {
       const result = classifyEnvironment(routePoints, elapsedSeconds);
       setLiveEnvironment(result);
     }
-  }, [routePoints, elapsedSeconds, isDriving]);
+  }, [routePoints, elapsedSeconds, isDriving, isPaused]);
 
-  // Sekuntikello
+  // Sekuntikello — lasketaan todellisesta alkuajasta vähentäen kertyneet tauot.
+  // Näin kello pysyy tarkasti oikeassa myös lepotilassa eikä laske taukoja ajoajaksi.
   useEffect(() => {
-    if (isDriving) {
+    if (isDriving && !isPaused && startTime) {
       timerIntervalRef.current = setInterval(() => {
-        setElapsedSeconds((prev) => prev + 1);
+        const activeSeconds = Math.floor((Date.now() - startTime.getTime() - totalPausedMsRef.current) / 1000);
+        setElapsedSeconds(Math.max(0, activeSeconds));
       }, 1000);
     } else {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -153,15 +236,10 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [isDriving]);
+  }, [isDriving, isPaused, startTime]);
 
   // Käynnistä ajo oikealla GPS:llä
-  const startRealDrive = () => {
-    if (!navigator.geolocation) {
-      alert('Selaimesi ei tue GPS-sijaintia.');
-      return;
-    }
-
+  const startRealDrive = async () => {
     const now = new Date();
     setStartTime(now);
     setElapsedSeconds(0);
@@ -169,150 +247,113 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
     setMaxSpeed(0);
     setTotalDistanceKm(0);
     setRoutePoints([]);
-    setIsSimulating(false);
     setIsDriving(true);
+    setIsPaused(false);
+    isPausedRef.current = false;
+    pauseStartTimeRef.current = null;
+    totalPausedMsRef.current = 0;
 
-    const id = navigator.geolocation.watchPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const speedKmh = pos.coords.speed !== null ? Math.round(pos.coords.speed * 3.6) : null;
-        const accuracy = Math.round(pos.coords.accuracy);
+    // Pidä näyttö päällä koko ajon ajan (jos käyttäjä ei ole poistunut käytöstä asetuksista)
+    const keepAwakePref = localStorage.getItem('opetuslupa_keep_awake');
+    if (keepAwakePref !== 'false') {
+      await acquireWakeLock();
+    }
 
-        setGpsAccuracy(accuracy);
+    // Käynnistä taustapaikannus (Foreground Service Androidilla)
+    await startLocationWatcher(
+      (point) => {
+        setGpsAccuracy(point.accuracy ?? null);
+
+        // Jos ajo on tauolla, älä kerrytä matkaa tai reittiä, mutta päivitä nykyinen sijaintimerkki kartalla
+        if (isPausedRef.current) {
+          if (currentMarkerRef.current) {
+            currentMarkerRef.current.setLatLng([point.lat, point.lng]);
+          }
+          return;
+        }
 
         // Suodatetaan epätarkat GPS-hyppäykset
-        if (accuracy > 35) return;
-
-        const newPoint: GeoPoint = {
-          lat,
-          lng,
-          timestamp: pos.timestamp || Date.now(),
-          speed: speedKmh,
-          accuracy,
-        };
+        if ((point.accuracy ?? 0) > 35) return;
 
         setRoutePoints((prev) => {
           if (prev.length > 0) {
             const last = prev[prev.length - 1];
-            const dist = calculateDistanceKm(last.lat, last.lng, lat, lng);
+            const dist = calculateDistanceKm(last.lat, last.lng, point.lat, point.lng);
             // Vain jos siirrytty yli 3 metriä
             if (dist > 0.003) {
               setTotalDistanceKm((d) => Number((d + dist).toFixed(2)));
-              const spd = speedKmh !== null ? speedKmh : Math.round(dist / ((newPoint.timestamp - last.timestamp) / 3600000));
+              const spd = point.speed !== null
+                ? point.speed
+                : Math.round(dist / ((point.timestamp - last.timestamp) / 3600000));
               setCurrentSpeed(spd);
               setMaxSpeed((m) => Math.max(m, spd));
-              return [...prev, newPoint];
+              return [...prev, point];
             }
             return prev;
           } else {
-            return [newPoint];
+            return [point];
           }
         });
       },
-      (err) => {
-        console.warn('GPS-virhe:', err);
+      (errCode) => {
+        console.warn('GPS-virhe:', errCode);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 1000,
-      }
     );
-
-    watchIdRef.current = id;
   };
 
-  // Käynnistä ajo simulaatiolla (Työpöytä- / esittelytestaus)
-  const startSimulatedDrive = () => {
-    const now = new Date();
-    setStartTime(now);
-    setElapsedSeconds(0);
+  // Aseta ajo tauolle
+  const pauseDrive = () => {
+    if (!isDriving || isPaused) return;
+    const now = Date.now();
+    setIsPaused(true);
+    isPausedRef.current = true;
+    pauseStartTimeRef.current = now;
     setCurrentSpeed(0);
-    setMaxSpeed(0);
-    setTotalDistanceKm(0);
-    setRoutePoints([]);
-    setIsSimulating(true);
-    setIsDriving(true);
-    setGpsAccuracy(5);
+  };
 
-    // Esimerkkireitti: Parkkipaikka -> Keskusta -> Taajama -> Tuusulanväylä (Maantie)
-    const baseLat = 60.1700;
-    const baseLng = 24.9400;
-    let step = 0;
-    let currentDistance = 0;
-
-    simulationIntervalRef.current = setInterval(() => {
-      step++;
-      let speed = 8; // km/h (pysäköinti)
-      let dLat = 0.0001;
-      let dLng = 0.0001;
-
-      if (step <= 5) {
-        // Pysäköintialue: hidas ryömintä ja suunnanmuutokset
-        speed = 6 + Math.sin(step) * 4;
-        dLat = Math.sin(step) * 0.0002;
-        dLng = Math.cos(step) * 0.0002;
-      } else if (step <= 15) {
-        // Kaupunkiajo: 20-35 km/h, liikennevalopysähdys stepissä 10
-        speed = step === 10 ? 0 : 25 + Math.sin(step) * 10;
-        dLat = 0.0004;
-        dLng = 0.0002;
-      } else if (step <= 25) {
-        // Taajama: 45-55 km/h
-        speed = 50 + Math.sin(step) * 5;
-        dLat = 0.0008;
-        dLng = 0.0004;
-      } else {
-        // Maantie: 85-100 km/h
-        speed = 90 + Math.sin(step) * 10;
-        dLat = 0.0015;
-        dLng = 0.0008;
-      }
-
-      const pointLat = baseLat + dLat * step;
-      const pointLng = baseLng + dLng * step;
-      const distStep = (speed / 3600) * 2; // 2 sekunnin edistymä
-      currentDistance += distStep;
-
-      setCurrentSpeed(Math.round(speed));
-      setMaxSpeed((m) => Math.max(m, Math.round(speed)));
-      setTotalDistanceKm(Number(currentDistance.toFixed(2)));
-
-      setRoutePoints((prev) => [
-        ...prev,
-        {
-          lat: pointLat,
-          lng: pointLng,
-          timestamp: Date.now(),
-          speed: Math.round(speed),
-          accuracy: 5,
-        },
-      ]);
-    }, 2000);
+  // Jatka ajoa tauon jälkeen
+  const resumeDrive = () => {
+    if (!isDriving || !isPaused) return;
+    if (pauseStartTimeRef.current) {
+      const segmentMs = Date.now() - pauseStartTimeRef.current;
+      totalPausedMsRef.current += segmentMs;
+      pauseStartTimeRef.current = null;
+    }
+    setIsPaused(false);
+    isPausedRef.current = false;
   };
 
   // Lopeta ajo ja avaa koontitiedot tallennusta varten
-  const stopDrive = () => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
-    if (simulationIntervalRef.current) {
-      clearInterval(simulationIntervalRef.current);
-      simulationIntervalRef.current = null;
+  const stopDrive = async () => {
+    // Pysäytä taustapaikannus ja salli näytön sammuminen
+    await stopLocationWatcher();
+    await releaseWakeLock();
+
+    // Huomioidaan mahdollinen aktiivinen taukojakso
+    let allPausedMs = totalPausedMsRef.current;
+    if (isPausedRef.current && pauseStartTimeRef.current) {
+      allPausedMs += Date.now() - pauseStartTimeRef.current;
     }
 
     setIsDriving(false);
-    setIsSimulating(false);
+    setIsPaused(false);
+    isPausedRef.current = false;
+    pauseStartTimeRef.current = null;
+    totalPausedMsRef.current = 0;
 
     const endTime = new Date();
-    const duration = Math.max(1, elapsedSeconds);
+    // Käytetään todellista seinäkelloaikaa vähennettynä taukoajoilla,
+    // jotta kesto on tarkka myös lepotilassa eikä sisällä taukoaikaa.
+    const realDurationSeconds = startTime
+      ? Math.floor((endTime.getTime() - startTime.getTime() - allPausedMs) / 1000)
+      : elapsedSeconds;
+    const duration = Math.max(1, realDurationSeconds);
     const avgSpeed = duration > 0 ? Number(((totalDistanceKm / (duration / 3600))).toFixed(1)) : 0;
     
     // Lopullinen analyysi ajoympäristöstä
     const finalEnv = classifyEnvironment(routePoints, duration);
     setSelectedEnvOverride(finalEnv.primary);
+    setSelectedTopicCode(mapEnvironmentToTraficomCode(finalEnv.primary));
 
     setFinalDriveData({
       startTime: startTime || new Date(Date.now() - duration * 1000),
@@ -328,6 +369,7 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
     setShowSaveModal(true);
   };
 
+
   // Tallennetaan ajokerta
   const handleConfirmSave = async () => {
     if (!finalDriveData) return;
@@ -340,6 +382,7 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
       distanceKm: finalDriveData.distanceKm,
       avgSpeedKmH: finalDriveData.avgSpeed,
       maxSpeedKmH: finalDriveData.maxSpeed,
+      topicCode: selectedTopicCode,
       environment: {
         primary: selectedEnvOverride,
         distribution: finalDriveData.environment.distribution,
@@ -378,27 +421,47 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
         {/* Yläpalkki: Tila ja Painikkeet */}
         <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <div className={`p-3 rounded-xl flex items-center justify-center ${
-              isDriving 
-                ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 animate-pulse' 
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+            <div className={`p-3 rounded-xl flex items-center justify-center transition-colors ${
+              !isDriving 
+                ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                : isPaused
+                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
+                : 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 animate-pulse'
             }`}>
-              <Navigation className="w-6 h-6" />
+              {isPaused ? (
+                <Pause className="w-6 h-6" />
+              ) : (
+                <Navigation className="w-6 h-6" />
+              )}
             </div>
             <div>
               <div className="flex items-center space-x-2">
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {isDriving ? (isSimulating ? 'Ajoseuranta käynnissä (Simulaatio)' : 'Ajoseuranta käynnissä') : 'Valmiina ajoon'}
+                  {!isDriving 
+                    ? 'Valmiina ajoon'
+                    : isPaused
+                    ? 'Ajo tauolla'
+                    : 'Ajoseuranta käynnissä'}
                 </h2>
                 {isDriving && (
                   <span className="flex h-2.5 w-2.5 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                    {isPaused ? (
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                    ) : (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                      </>
+                    )}
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {isDriving ? 'GPS tallentaa reittiä, nopeutta ja ajoympäristöä' : 'Käynnistä seuranta aloittaessasi ajotunnin'}
+                {!isDriving
+                  ? 'Käynnistä seuranta aloittaessasi ajotunnin'
+                  : isPaused
+                  ? 'Ajo on keskeytetty – aika ja matka eivät kerry'
+                  : 'GPS tallentaa reittiä, nopeutta ja ajoympäristöä'}
               </p>
             </div>
           </div>
@@ -409,49 +472,88 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
               <>
                 <button
                   onClick={onOpenManualEntry}
-                  className="px-3 py-2 text-xs sm:text-sm font-medium rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                  className="px-3 py-2 text-xs sm:text-sm font-medium rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition cursor-pointer"
                 >
                   Lisää ajo manuaalisesti
                 </button>
 
                 <button
-                  onClick={startSimulatedDrive}
-                  className="px-3 py-2 text-xs sm:text-sm font-medium rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 transition flex items-center space-x-1.5"
-                  title="Testaa seurantaa ja ajoympäristön arviointia työpöydällä"
-                >
-                  <Sparkles className="w-4 h-4 text-indigo-500" />
-                  <span>Simuloi ajo</span>
-                </button>
-
-                <button
                   onClick={startRealDrive}
-                  className="px-5 py-2.5 text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition flex items-center space-x-2"
+                  className="px-5 py-2.5 text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition flex items-center space-x-2 cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-white" />
                   <span>Aloita ajo (GPS)</span>
                 </button>
               </>
             ) : (
-              <button
-                onClick={stopDrive}
-                className="px-6 py-2.5 text-sm font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 active:scale-95 transition flex items-center space-x-2 animate-bounce-subtle"
-              >
-                <Square className="w-4 h-4 fill-white" />
-                <span>Päätä ajo & Tallenna</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {!isPaused ? (
+                  <button
+                    onClick={pauseDrive}
+                    className="px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white shadow-md shadow-amber-500/20 active:scale-95 transition flex items-center space-x-1.5 cursor-pointer"
+                    title="Aseta ajo tauolle (pysäyttää ajan ja matkan kertymisen)"
+                  >
+                    <Pause className="w-4 h-4 fill-white" />
+                    <span>Tauko</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={resumeDrive}
+                    className="px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-lg shadow-emerald-600/30 active:scale-95 transition flex items-center space-x-1.5 animate-pulse cursor-pointer"
+                    title="Jatka ajoseurantaa"
+                  >
+                    <Play className="w-4 h-4 fill-white" />
+                    <span>Jatka ajoa</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={stopDrive}
+                  className="px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-bold rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white shadow-md shadow-rose-600/25 active:scale-95 transition flex items-center space-x-1.5 cursor-pointer"
+                  title="Päätä ajo ja siirry tallennukseen"
+                >
+                  <Square className="w-4 h-4 fill-white" />
+                  <span>Päätä ajo</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
 
         {/* Telemetria ja Mittarit (Ajon aikana) */}
         <div className="p-4 sm:p-6 bg-slate-50/70 dark:bg-slate-850/50 border-b border-slate-100 dark:border-slate-800">
+          
+          {/* Tauko-ilmoituspalkki */}
+          {isDriving && isPaused && (
+            <div className="mb-4 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 flex items-center justify-between gap-3 animate-in fade-in duration-200">
+              <div className="flex items-center space-x-2.5 text-amber-900 dark:text-amber-200 text-xs sm:text-sm">
+                <PauseCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Ajo on <strong>tauolla</strong> – aika ja matka eivät kerry. Paina <strong>"Jatka ajoa"</strong> kun jatkatte matkaa.</span>
+              </div>
+              <button
+                onClick={resumeDrive}
+                className="shrink-0 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-sm cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5 fill-white" />
+                <span>Jatka</span>
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             
             {/* Kesto */}
             <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
-              <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-xs mb-1">
-                <Timer className="w-3.5 h-3.5 text-blue-500" />
-                <span>Ajoaika</span>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-xs">
+                  <Timer className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Ajoaika</span>
+                </div>
+                {isDriving && isPaused && (
+                  <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 rounded">
+                    Tauko
+                  </span>
+                )}
               </div>
               <div className="text-xl sm:text-2xl font-bold font-mono text-slate-900 dark:text-white">
                 {formatTime(elapsedSeconds)}
@@ -471,17 +573,30 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
 
             {/* Hetkellinen Nopeus */}
             <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
-              <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-xs mb-1">
-                <Gauge className="w-3.5 h-3.5 text-amber-500" />
-                <span>Nopeus</span>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 text-xs">
+                  <Gauge className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Nopeus</span>
+                </div>
+                {isDriving && isPaused && (
+                  <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 rounded">
+                    Pysäytetty
+                  </span>
+                )}
               </div>
               <div className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-baseline space-x-1">
-                <span>{currentSpeed}</span>
-                <span className="text-xs font-normal text-slate-500">km/h</span>
-                {maxSpeed > 0 && (
-                  <span className="text-[10px] text-slate-400 ml-auto hidden sm:inline">
-                    max {maxSpeed}
-                  </span>
+                {isDriving && isPaused ? (
+                  <span className="text-amber-600 dark:text-amber-400 text-lg sm:text-xl font-medium">0 km/h</span>
+                ) : (
+                  <>
+                    <span>{currentSpeed}</span>
+                    <span className="text-xs font-normal text-slate-500">km/h</span>
+                    {maxSpeed > 0 && (
+                      <span className="text-[10px] text-slate-400 ml-auto hidden sm:inline">
+                        max {maxSpeed}
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -602,6 +717,36 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
                 </div>
               </div>
 
+              {/* Opetusaihe */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Opetusaihe:
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['K', 'A', 'B'] as TraficomTopicCode[]).map((code) => {
+                    const cfg = TRAFICOM_TOPIC_CONFIG[code];
+                    const isSelected = selectedTopicCode === code;
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => setSelectedTopicCode(code)}
+                        className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center ${
+                          isSelected
+                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/50 text-blue-900 dark:text-blue-100 ring-2 ring-blue-500/20 font-bold'
+                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <span className="text-sm font-extrabold">{code}</span>
+                        <span className="text-[10px] leading-tight text-slate-500 dark:text-slate-400 mt-0.5">
+                          {cfg.label.split(' ')[0]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Automaattinen arvio & valinta */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
@@ -619,7 +764,10 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
                       <button
                         key={envKey}
                         type="button"
-                        onClick={() => setSelectedEnvOverride(envKey)}
+                        onClick={() => {
+                          setSelectedEnvOverride(envKey);
+                          setSelectedTopicCode(mapEnvironmentToTraficomCode(envKey));
+                        }}
                         className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
                           isSelected
                             ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
@@ -657,6 +805,12 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
                   rows={3}
                   className="w-full text-xs sm:text-sm p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-hidden"
                 />
+              </div>
+
+              {/* Automaattinen Google Drive -varmuuskopiointi -info */}
+              <div className="flex items-center space-x-2.5 p-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 text-xs text-blue-700 dark:text-blue-300">
+                <CloudUpload className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <span>Ajokerta varmuuskopioidaan automaattisesti Google Driveen tallennuksen yhteydessä.</span>
               </div>
 
             </div>

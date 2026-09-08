@@ -1,4 +1,5 @@
 export type EnvironmentType = 'maantie' | 'taajama' | 'kaupunki' | 'pysakointi';
+export type TraficomTopicCode = 'K' | 'A' | 'B';
 
 export interface EnvironmentDistribution {
   maantie: number;
@@ -31,23 +32,35 @@ export interface DriveSession {
   maxSpeedKmH: number;
   environment: DriveEnvironment;
   routePoints: GeoPoint[];
-  notes: string;
-  studentName?: string;
+  topicCode: TraficomTopicCode; // K, A tai B
+  notes: string;                // Aiheen tarkennus (esim. "Taskupysäköinti" tai "Liittymät")
   teacherNotes?: string;
+  studentName?: string;
   createdAt: string;
+}
+
+export interface TeachingInfo {
+  studentName: string;
+  studentSsn: string;
+  teacherName: string;
+  teacherSsn: string;
+  licenseClass: string;
+  startDate: string;
 }
 
 export interface OverallStats {
   totalDrives: number;
   totalDurationSeconds: number;
   totalDistanceKm: number;
+  lessonHours50Min: number; // Ajotunnit (50 min / tunti)
   byEnvironment: Record<EnvironmentType, { count: number; durationSeconds: number; distanceKm: number }>;
+  byTopicCode: Record<TraficomTopicCode, { count: number; durationSeconds: number }>;
 }
 
 export interface BackupPayload {
   version: string;
   exportedAt: string;
   appName: string;
-  totalDrives: number;
+  teachingInfo: TeachingInfo;
   drives: DriveSession[];
 }

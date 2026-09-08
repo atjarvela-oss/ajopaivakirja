@@ -42,10 +42,17 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
       zoomControl: true,
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap',
-      maxZoom: 19,
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_2zol_1_eeae5b3125b861ead072afd6', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 20,
+      crossOrigin: true,
+      keepBuffer: 6,
+      updateWhenIdle: false,
+      updateWhenZooming: true,
     }).addTo(map);
+
+    let polylineBounds: L.LatLngBounds | null = null;
 
     if (drive.routePoints && drive.routePoints.length > 0) {
       const latLngs = drive.routePoints.map((p) => [p.lat, p.lng] as [number, number]);
@@ -53,10 +60,13 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
       // Reittiviiva
       const polyline = L.polyline(latLngs, {
         color: '#2563eb',
-        weight: 5,
-        opacity: 0.85,
+        weight: 6,
+        opacity: 0.9,
         lineJoin: 'round',
+        lineCap: 'round',
       }).addTo(map);
+
+      polylineBounds = polyline.getBounds();
 
       // Lähtöpiste (Vihreä)
       const startPoint = latLngs[0];
@@ -81,14 +91,40 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
       }).addTo(map).bindPopup('Lopetuspiste');
 
       // Sovitetaan kartta reittiin
-      map.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+      if (polylineBounds.isValid()) {
+        map.fitBounds(polylineBounds, { padding: [40, 40] });
+      } else {
+        map.setView(startPoint, 15);
+      }
     } else {
-      map.setView([60.1699, 24.9384], 13);
+      map.setView([60.1699, 24.9384], 14);
     }
 
     mapInstanceRef.current = map;
 
+    // Varmistetaan että modaalin avautumisanimaation jälkeen mitat päivittyvät
+    map.whenReady(() => {
+      setTimeout(() => {
+        map.invalidateSize();
+        if (polylineBounds && polylineBounds.isValid()) {
+          map.fitBounds(polylineBounds, { padding: [40, 40] });
+        }
+      }, 150);
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 400);
+    });
+
+    // ResizeObserver modaalille
+    const observer = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    if (mapContainerRef.current) {
+      observer.observe(mapContainerRef.current);
+    }
+
     return () => {
+      observer.disconnect();
       map.remove();
       mapInstanceRef.current = null;
     };

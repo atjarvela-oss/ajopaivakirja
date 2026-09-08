@@ -6,9 +6,8 @@ import {
   Trash2, 
   Clock, 
   Search, 
-  Eye,
-  FileDown,
-  Image as ImageIcon
+  Eye, 
+  FileDown
 } from 'lucide-react';
 import type { DriveSession, EnvironmentType } from '../types';
 import { ENVIRONMENT_CONFIG } from '../services/environmentClassifier';
@@ -19,7 +18,6 @@ interface DriveTableProps {
   onSelectDrive: (drive: DriveSession) => void;
   onRefresh: () => void;
   onExportPdf?: () => void;
-  onExportPng?: () => void;
 }
 
 export const DriveTable: React.FC<DriveTableProps> = ({
@@ -27,7 +25,6 @@ export const DriveTable: React.FC<DriveTableProps> = ({
   onSelectDrive,
   onRefresh,
   onExportPdf,
-  onExportPng,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [envFilter, setEnvFilter] = useState<EnvironmentType | 'all'>('all');
@@ -158,18 +155,6 @@ export const DriveTable: React.FC<DriveTableProps> = ({
             <span className="hidden sm:inline">CSV</span>
           </button>
 
-          {/* PNG-vienti */}
-          {onExportPng && (
-            <button
-              onClick={onExportPng}
-              className="px-2.5 sm:px-3 py-2 text-xs font-semibold rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 hover:bg-purple-100 transition flex items-center space-x-1"
-              title="Vie ajopäiväkirja kuvana (PNG)"
-            >
-              <ImageIcon className="w-3.5 h-3.5 text-purple-600" />
-              <span>PNG</span>
-            </button>
-          )}
-
           {/* PDF-vienti */}
           {onExportPdf && (
             <button
@@ -196,7 +181,7 @@ export const DriveTable: React.FC<DriveTableProps> = ({
       {/* Tulostusotsikko (Näkyy vain paperilla/tulosteessa) */}
       <div className="hidden print-only p-4 border-b border-slate-300 text-black">
         <h1 className="text-xl font-bold">OPETUSLUVAN AJOPÄIVÄKIRJA</h1>
-        <p className="text-sm">Traficom / Ajovarma -vaatimusten mukainen ajokertojen erittely</p>
+        <p className="text-sm">Ajo-opetuksen ajokertojen ja opetusaiheiden erittely</p>
         <p className="text-xs text-slate-600 mt-1">Tulostettu: {new Date().toLocaleDateString('fi-FI')} klo {new Date().toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' })}</p>
       </div>
 

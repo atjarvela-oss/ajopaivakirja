@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { classifyEnvironment, calculateDistanceKm } from './environmentClassifier';
+import { classifyEnvironment, calculateDistanceKm, mapEnvironmentToTraficomCode } from './environmentClassifier';
+import { calculateOverallStats } from './localDb';
 import type { GeoPoint } from '../types';
 
 describe('environmentClassifier', () => {
@@ -62,5 +63,52 @@ describe('environmentClassifier', () => {
     const res = classifyEnvironment(points, 80);
     expect(res.primary).toBe('maantie');
     expect(res.distribution.maantie).toBeGreaterThan(50);
+  });
+
+  it('mäppää ajoympäristöt virallisiin Traficom E505sv koodeihin (K, A, B)', () => {
+    expect(mapEnvironmentToTraficomCode('pysakointi')).toBe('K');
+    expect(mapEnvironmentToTraficomCode('kaupunki')).toBe('A');
+    expect(mapEnvironmentToTraficomCode('taajama')).toBe('A');
+    expect(mapEnvironmentToTraficomCode('maantie')).toBe('B');
+  });
+
+  it('laskee opetusluvan 50 min ajotuntien määrän oikein', () => {
+    const dummyDrives = [
+      {
+        id: '1',
+        startTime: '2026-09-01T10:00:00Z',
+        endTime: '2026-09-01T10:50:00Z',
+        durationSeconds: 50 * 60, // 50 min = 1.0 h
+        distanceKm: 30,
+        avgSpeedKmH: 36,
+        maxSpeedKmH: 60,
+        topicCode: 'A' as const,
+        notes: 'Taajama-ajoa',
+        environment: { primary: 'taajama' as const, distribution: { maantie: 0, taajama: 100, kaupunki: 0, pysakointi: 0 } },
+        routePoints: [],
+        createdAt: '2026-09-01T10:50:00Z',
+      },
+      {
+        id: '2',
+        startTime: '2026-09-02T10:00:00Z',
+        endTime: '2026-09-02T10:25:00Z',
+        durationSeconds: 25 * 60, // 25 min = 0.5 h
+        distanceKm: 15,
+        avgSpeedKmH: 36,
+        maxSpeedKmH: 60,
+        topicCode: 'B' as const,
+        notes: 'Maantieajoa',
+        environment: { primary: 'maantie' as const, distribution: { maantie: 100, taajama: 0, kaupunki: 0, pysakointi: 0 } },
+        routePoints: [],
+        createdAt: '2026-09-02T10:25:00Z',
+      },
+    ];
+
+    const stats = calculateOverallStats(dummyDrives);
+    expect(stats.totalDrives).toBe(2);
+    expect(stats.totalDistanceKm).toBe(45);
+    expect(stats.lessonHours50Min).toBe(1.5);
+    expect(stats.byTopicCode.A.count).toBe(1);
+    expect(stats.byTopicCode.B.count).toBe(1);
   });
 });

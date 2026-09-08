@@ -158,3 +158,36 @@ export const ENVIRONMENT_CONFIG: Record<EnvironmentType, {
     description: 'Pysäköinti, peruutus, taskuparkki, ryömintä ja ajoneuvon hallinta.',
   },
 };
+
+export const TRAFICOM_TOPIC_CONFIG = {
+  K: {
+    code: 'K',
+    title: 'Käsittelyopetus',
+    label: 'Käsittelyopetus',
+    swedish: 'manövreringsundervisning',
+    description: 'Pysäköinti, ryömintä, ajoneuvon hallinta ja peruutus',
+    badgeClass: 'bg-purple-100 text-purple-800 border-purple-300',
+  },
+  A: {
+    code: 'A',
+    title: 'Taajama-ajo',
+    label: 'Taajama-ajo',
+    swedish: 'körning i tätort',
+    description: 'Keskusta- ja taajama-ajo, risteykset ja kiertoliittymät',
+    badgeClass: 'bg-blue-100 text-blue-800 border-blue-300',
+  },
+  B: {
+    code: 'B',
+    title: 'Maantieajo',
+    label: 'Maantieajo',
+    swedish: 'landsvägskörning',
+    description: 'Maantie, moottoritie, ohitukset ja suuremmat nopeudet',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  },
+} as const;
+
+export function mapEnvironmentToTraficomCode(env: EnvironmentType): 'K' | 'A' | 'B' {
+  if (env === 'pysakointi') return 'K';
+  if (env === 'maantie') return 'B';
+  return 'A'; // taajama & kaupunki
+}
