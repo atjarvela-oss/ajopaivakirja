@@ -123,8 +123,12 @@ export function App() {
 
   const handleBackupDrive = async () => {
     try {
-      await backupToGoogleDrive(drives, teachingInfo);
-      showToast('Valitse "Tallenna Google Driveen" avautuvasta jakovalikosta!');
+      const res = await backupToGoogleDrive(drives, teachingInfo);
+      if (res.directCloud) {
+        showToast(`Varmuuskopio tallennettu suoraan Google Driveen! (${res.filename})`);
+      } else {
+        showToast('Valitse "Tallenna Google Driveen" avautuvasta jakovalikosta!');
+      }
     } catch (e: any) {
       console.error(e);
       showToast('Varmuuskopiointi epäonnistui: ' + (e?.message || e), 'error');
@@ -150,8 +154,12 @@ export function App() {
     if (autoBackup) {
       try {
         const latestDrives = getLocalDrives();
-        showToast('Ajokerta tallennettu! Varmuuskopioidaan Google Driveen...');
-        await backupToGoogleDrive(latestDrives, teachingInfo);
+        const res = await backupToGoogleDrive(latestDrives, teachingInfo);
+        if (res.directCloud) {
+          showToast('Ajokerta tallennettu ja varmuuskopioitu suoraan Google Driveen!');
+        } else {
+          showToast('Ajokerta tallennettu! Varmuuskopioidaan Google Driveen...');
+        }
       } catch (err: any) {
         console.warn('Automaattinen varmuuskopiointi keskeytyi:', err);
       }
@@ -247,6 +255,13 @@ export function App() {
             onBackupDrive={handleBackupDrive}
             onRestoreDrive={handleRestoreDrive}
             drivesCount={drives.length}
+            drives={drives}
+            teachingInfo={teachingInfo}
+            onDataRestored={(count) => {
+              refreshDrives();
+              showToast(`Palautettiin onnistuneesti ${count} ajokertaa!`);
+            }}
+            onShowToast={showToast}
           />
         )}
 

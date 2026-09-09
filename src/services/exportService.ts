@@ -4,6 +4,8 @@ import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
 import type { DriveSession, OverallStats, TeachingInfo } from '../types';
+import { getAccessToken } from './googleAuth';
+import { uploadPdfToGoogleDrive } from './googleDriveService';
 
 /**
  * Muuntaa Blob-objektin Base64-merkkijonoksi (ilman data-URL etuliitettä)
@@ -103,13 +105,13 @@ export async function shareOrDownloadFile(
 }
 
 /**
- * Luo virallisen Traficom E505sv Opetuskortin mukaisen PDF-tiedoston
+ * Luo virallisen Traficom E505sv Opetuskortin PDF Blob -muodossa
  */
-export async function exportTraficomPdf(
+export function generateTraficomPdfBlob(
   drives: DriveSession[],
   stats: OverallStats,
   teachingInfo: TeachingInfo
-): Promise<void> {
+): { blob: Blob; filename: string } {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -328,9 +330,46 @@ export async function exportTraficomPdf(
     }
   }
 
-  // Luodaan tiedosto ja jaetaan
+  // Luodaan tiedosto ja palautetaan blob
   const pdfBlob = doc.output('blob');
   const filename = `opetuskortti_${new Date().toISOString().slice(0, 10)}.pdf`;
+  return { blob: pdfBlob, filename };
+}
 
-  await shareOrDownloadFile(pdfBlob, filename, 'application/pdf', 'Tallenna PDF Google Driveen tai jaa');
+/**
+ * Luo virallisen Traficom E505sv Opetuskortin mukaisen PDF-tiedoston ja avaa jakovalikon
+ */
+export async function exportTraficomPdf(
+  drives: DriveSession[],
+  stats: OverallStats,
+  teachingInfo: TeachingInfo
+): Promise<void> {
+  const { blob, filename } = generateTraficomPdfBlob(drives, stats, teachingInfo);
+  await shareOrDownloadFile(blob, filename, 'application/pdf', 'Tallenna PDF Google Driveen tai jaa');
+}
+
+/**
+ * Tallentaa Traficom E505sv Opetuskortti-PDF:n suoraan käyttäjän Google Driveen
+ */
+export async function savePdfToGoogleDrive(
+  drives: DriveSession[],
+  stats: OverallStats,
+  teachingInfo: TeachingInfo
+): Promise<{ success: boolean; name?: string; error?: string }> {
+  const token = await getAccessToken();
+  if (!token) {
+    return { 
+      success: false, 
+      error: 'Ei aktiivista Google-kirjautumista. Kirjaudu Google-tililläsi Asetukset-välilehdellä.' 
+    };
+  }
+
+  try {
+    const { blob, filename } = generateTraficomPdfBlob(drives, stats, teachingInfo);
+    const result = await uploadPdfToGoogleDrive(token, blob, filename);
+    return { success: true, name: result.name };
+  } catch (err: any) {
+    console.error('PDF:n tallennus Google Driveen epäonnistui:', err);
+    return { success: false, error: err.message || String(err) };
+  }
 }

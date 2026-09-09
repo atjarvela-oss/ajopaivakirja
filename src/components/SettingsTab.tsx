@@ -20,6 +20,8 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
+import type { DriveSession, TeachingInfo } from '../types';
+import { GoogleDriveManager } from './GoogleDriveManager';
 import type { ThemeMode } from '../services/themeService';
 import { 
   APP_VERSION, 
@@ -35,6 +37,10 @@ interface SettingsTabProps {
   onBackupDrive: () => void;
   onRestoreDrive: (file: File) => void;
   drivesCount: number;
+  drives: DriveSession[];
+  teachingInfo: TeachingInfo;
+  onDataRestored: (count: number) => void;
+  onShowToast: (message: string, type?: 'success' | 'error') => void;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
@@ -43,6 +49,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onBackupDrive,
   onRestoreDrive,
   drivesCount,
+  drives,
+  teachingInfo,
+  onDataRestored,
+  onShowToast,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -150,35 +160,49 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Varmuuskopioi */}
-          <button
-            onClick={onBackupDrive}
-            className="flex items-center justify-center space-x-2 p-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-98 text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-600/20 transition cursor-pointer"
-          >
-            <CloudUpload className="w-4 h-4" />
-            <span>Varmuuskopioi manuaalisesti Driveen</span>
-          </button>
+        {/* Google Drive Pilvi-integraatio */}
+        <GoogleDriveManager
+          drives={drives}
+          teachingInfo={teachingInfo}
+          onDataRestored={onDataRestored}
+          onShowToast={onShowToast}
+        />
 
-          {/* Palauta */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center space-x-2 p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 text-slate-800 dark:text-slate-200 font-semibold text-xs sm:text-sm transition cursor-pointer"
-          >
-            <FolderDown className="w-4 h-4" />
-            <span>Palauta varmuuskopiosta (JSON)</span>
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept=".json"
-            className="hidden"
-          />
+        {/* Paikallinen varmuuskopiointi ja tiedostojen tuonti (varatoiminto) */}
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
+            Vaihtoehtoiset toiminnot (Offline / Tiedostot)
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Varmuuskopioi */}
+            <button
+              onClick={onBackupDrive}
+              className="flex items-center justify-center space-x-2 p-3 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 text-slate-700 dark:text-slate-300 font-semibold text-xs transition cursor-pointer"
+            >
+              <CloudUpload className="w-4 h-4 text-blue-500" />
+              <span>Jaa tai tallenna JSON-tiedosto</span>
+            </button>
+
+            {/* Palauta */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center justify-center space-x-2 p-3 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 text-slate-700 dark:text-slate-300 font-semibold text-xs transition cursor-pointer"
+            >
+              <FolderDown className="w-4 h-4 text-emerald-500" />
+              <span>Tuo varmuuskopio laitteelta (JSON)</span>
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".json"
+              className="hidden"
+            />
+          </div>
         </div>
 
         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">
-          💡 Automaattisen tallennuksen lisäksi voit milloin tahansa luoda manuaalisen varmuuskopion tai palauttaa aiemman varmuuskopiotiedoston.
+          💡 Varmuuskopiot tallentuvat Google Driveesi ja voit palauttaa ne millä tahansa laitteella kirjautumalla samalla Google-tilillä.
         </p>
       </div>
 
