@@ -10,7 +10,11 @@ import {
   FileText,
   HardDrive,
   Clock,
-  Loader2
+  Loader2,
+  ExternalLink,
+  Copy,
+  Check,
+  X
 } from 'lucide-react';
 import type { DriveSession, TeachingInfo } from '../types';
 import { 
@@ -56,6 +60,8 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
   // Vahvistusmodaalin tila (MANDATORY per Google Workspace policy)
   const [confirmDeleteFile, setConfirmDeleteFile] = useState<GoogleDriveBackupItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState(false);
 
   const loadBackups = useCallback(async (token?: string) => {
     const accessToken = token || authState.accessToken || await getAccessToken();
@@ -105,7 +111,11 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
       }
     } catch (err: any) {
       console.error('Google sign-in epäonnistui:', err);
-      if (err?.code !== 'auth/popup-closed-by-user') {
+      if (err?.code === 'auth/unauthorized-domain') {
+        const host = window.location.hostname;
+        setUnauthorizedDomain(host);
+        onShowToast(`Osoitetta "${host}" ei ole vielä valtuutettu Firebase Consoleissa. Katso ohjeet alta.`, 'error');
+      } else if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
         onShowToast('Google-kirjautuminen epäonnistui: ' + (err.message || err), 'error');
       }
     } finally {
@@ -205,6 +215,68 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Unauthorized domain -opastusbanneri */}
+      {unauthorizedDomain && (
+        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 space-y-3 animate-in fade-in duration-200">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start space-x-2.5">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                  Valtuuta tämä osoite Firebase Consoleissa
+                </h4>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300/90 mt-0.5 leading-relaxed">
+                  Googlen kirjautumisturvallisuus edellyttää, että sovelluksen verkko-osoite lisätään Firebasen sallittujen osoitteiden listalle.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setUnauthorizedDomain(null)}
+              className="text-amber-600 hover:text-amber-800 dark:text-amber-400 p-1 cursor-pointer"
+              title="Sulje"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center space-x-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/60 text-xs">
+            <span className="font-mono text-[11px] text-slate-800 dark:text-slate-200 truncate select-all flex-1">
+              {unauthorizedDomain}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(unauthorizedDomain);
+                setCopiedDomain(true);
+                setTimeout(() => setCopiedDomain(false), 2000);
+              }}
+              className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/60 hover:bg-amber-200 text-amber-800 dark:text-amber-200 text-[11px] font-semibold transition shrink-0 cursor-pointer"
+            >
+              {copiedDomain ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedDomain ? 'Kopioitu!' : 'Kopioi osoite'}</span>
+            </button>
+          </div>
+
+          <div className="text-[11px] text-amber-900/90 dark:text-amber-300/80 space-y-1 pl-1">
+            <p>1. Avaa <strong>Firebase Console</strong> alla olevasta linkistä.</p>
+            <p>2. Valitse <strong>Authorized domains</strong> ➔ <strong>Add domain</strong>.</p>
+            <p>3. Liitä kopioitu osoite, paina <strong>Done</strong> ja kokeile kirjautua uudelleen!</p>
+          </div>
+
+          <div>
+            <a
+              href="https://console.firebase.google.com/project/gen-lang-client-0312449356/authentication/settings"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-98 text-white font-bold text-xs shadow-xs transition"
+            >
+              <span>Avaa Firebase Console Authorized domains</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Kirjautumistila */}
       <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850/80 border border-slate-200 dark:border-slate-800 transition-all">
         {authState.isAuthenticated && authState.user ? (
