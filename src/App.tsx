@@ -124,11 +124,7 @@ export function App() {
   const handleBackupDrive = async () => {
     try {
       const res = await backupToGoogleDrive(drives, teachingInfo);
-      if (res.directCloud) {
-        showToast(`Varmuuskopio tallennettu suoraan Google Driveen! (${res.filename})`);
-      } else {
-        showToast('Valitse "Tallenna Google Driveen" avautuvasta jakovalikosta!');
-      }
+      showToast(`Varmuuskopio luotu (${res.filename})`);
     } catch (e: any) {
       console.error(e);
       showToast('Varmuuskopiointi epäonnistui: ' + (e?.message || e), 'error');
@@ -148,24 +144,7 @@ export function App() {
   const handleDriveSaved = async () => {
     refreshDrives();
     setActiveTab('raportti'); // Siirrytään suoraan raporttiin tallennuksen jälkeen
-
-    // Automaattinen Google Drive -varmuuskopiointi jokaisen ajon jälkeen (oletus: päällä)
-    const autoBackup = localStorage.getItem('opetuslupa_auto_backup') !== 'false';
-    if (autoBackup) {
-      try {
-        const latestDrives = getLocalDrives();
-        const res = await backupToGoogleDrive(latestDrives, teachingInfo);
-        if (res.directCloud) {
-          showToast('Ajokerta tallennettu ja varmuuskopioitu suoraan Google Driveen!');
-        } else {
-          showToast('Ajokerta tallennettu! Varmuuskopioidaan Google Driveen...');
-        }
-      } catch (err: any) {
-        console.warn('Automaattinen varmuuskopiointi keskeytyi:', err);
-      }
-    } else {
-      showToast('Ajokerta tallennettu onnistuneesti!');
-    }
+    showToast('Ajokerta tallennettu onnistuneesti!');
   };
 
   return (
@@ -255,13 +234,6 @@ export function App() {
             onBackupDrive={handleBackupDrive}
             onRestoreDrive={handleRestoreDrive}
             drivesCount={drives.length}
-            drives={drives}
-            teachingInfo={teachingInfo}
-            onDataRestored={(count) => {
-              refreshDrives();
-              showToast(`Palautettiin onnistuneesti ${count} ajokertaa!`);
-            }}
-            onShowToast={showToast}
           />
         )}
 

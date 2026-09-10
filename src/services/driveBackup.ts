@@ -1,27 +1,14 @@
 import type { DriveSession, BackupPayload, TeachingInfo } from '../types';
 import { importDrives, getTeachingInfo, saveTeachingInfo } from './localDb';
 import { shareOrDownloadFile } from './exportService';
-import { getAccessToken } from './googleAuth';
-import { uploadBackupToGoogleDrive } from './googleDriveService';
 
 /**
- * Luo täyden JSON-varmuuskopion.
- * Jos käyttäjä on kirjautunut Google Driveen, tallentaa suoraan pilveen.
- * Muutoin avaa laitteen järjestelmäjaon / lataa tiedoston.
+ * Luo täyden JSON-varmuuskopion ja avaa järjestelmäjaon tai lataa tiedoston.
  */
 export async function backupToGoogleDrive(
   drives: DriveSession[], 
   teachingInfo: TeachingInfo
 ): Promise<{ directCloud: boolean; filename: string }> {
-  const token = await getAccessToken();
-
-  if (token) {
-    // Suora Google Drive -tallennus REST API:lla
-    const result = await uploadBackupToGoogleDrive(token, drives, teachingInfo);
-    return { directCloud: true, filename: result.name };
-  }
-
-  // Paikallinen / jakovalikon varatoiminto
   const payload: BackupPayload = {
     version: '2.0',
     appName: 'Opetuslupa Ajopäiväkirja',
@@ -34,7 +21,7 @@ export async function backupToGoogleDrive(
   const blob = new Blob([jsonStr], { type: 'application/json' });
   const filename = `ajopaivakirja_backup_${new Date().toISOString().slice(0, 10)}.json`;
 
-  await shareOrDownloadFile(blob, filename, 'application/json', 'Tallenna varmuuskopio Google Driveen');
+  await shareOrDownloadFile(blob, filename, 'application/json', 'Tallenna tai jaa varmuuskopio');
   return { directCloud: false, filename };
 }
 

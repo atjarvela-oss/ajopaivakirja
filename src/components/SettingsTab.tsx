@@ -20,8 +20,6 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import type { DriveSession, TeachingInfo } from '../types';
-import { GoogleDriveManager } from './GoogleDriveManager';
 import type { ThemeMode } from '../services/themeService';
 import { 
   APP_VERSION, 
@@ -37,10 +35,6 @@ interface SettingsTabProps {
   onBackupDrive: () => void;
   onRestoreDrive: (file: File) => void;
   drivesCount: number;
-  drives: DriveSession[];
-  teachingInfo: TeachingInfo;
-  onDataRestored: (count: number) => void;
-  onShowToast: (message: string, type?: 'success' | 'error') => void;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
@@ -49,23 +43,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onBackupDrive,
   onRestoreDrive,
   drivesCount,
-  drives,
-  teachingInfo,
-  onDataRestored,
-  onShowToast,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Automaattinen varmuuskopiointi ajon jälkeen — oletuksena päällä (true)
-  const [autoBackupPref, setAutoBackupPref] = useState<boolean>(() => {
-    const saved = localStorage.getItem('opetuslupa_auto_backup');
-    return saved === null ? true : saved === 'true';
-  });
-
-  const handleAutoBackupToggle = (val: boolean) => {
-    setAutoBackupPref(val);
-    localStorage.setItem('opetuslupa_auto_backup', String(val));
-  };
 
   // Hereilläpito-asetus — tallennetaan paikallisesti
   const [keepAwakePref, setKeepAwakePref] = useState<boolean>(() => {
@@ -101,7 +80,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12">
       
-      {/* 1. Google Drive -varmuuskopiointi */}
+      {/* 1. Varmuuskopiointi ja tietojen palautus */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="flex items-center space-x-3 mb-4">
           <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
@@ -109,44 +88,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           </div>
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              Google Drive -varmuuskopiointi
+              Varmuuskopiointi ja tietojen palautus
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Tallenna kaikki ajotiedot turvaan omaan pilvipalveluusi tai siirrä toiselle laitteelle
+              Tallenna ajopäiväkirjan tiedot tiedostona turvaan tai siirrä toiseen puhelimeen
             </p>
           </div>
-        </div>
-
-        {/* Automaattinen varmuuskopiointi -kytkin */}
-        <div className="flex items-center justify-between p-3.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/40 mb-4">
-          <div className="flex items-center space-x-3 pr-3">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 shrink-0">
-              <CloudUpload className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-900 dark:text-white">
-                Automaattinen varmuuskopiointi jokaisen ajon jälkeen
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                Käynnistää varmuuskopioinnin Google Driveen heti, kun ajokerta päätetään ja tallennetaan.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => handleAutoBackupToggle(!autoBackupPref)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-              autoBackupPref ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'
-            }`}
-            role="switch"
-            aria-checked={autoBackupPref}
-            title={autoBackupPref ? 'Kytke pois automaattinen varmuuskopiointi' : 'Kytke päälle automaattinen varmuuskopiointi'}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition duration-200 ${
-                autoBackupPref ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
         </div>
 
         <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800 mb-4 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
@@ -160,49 +107,37 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           </span>
         </div>
 
-        {/* Google Drive Pilvi-integraatio */}
-        <GoogleDriveManager
-          drives={drives}
-          teachingInfo={teachingInfo}
-          onDataRestored={onDataRestored}
-          onShowToast={onShowToast}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Varmuuskopioi */}
+          <button
+            id="btn-backup-json"
+            onClick={onBackupDrive}
+            className="flex items-center justify-center space-x-2 p-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-98 text-white font-semibold text-xs shadow-xs transition cursor-pointer"
+          >
+            <CloudUpload className="w-4 h-4" />
+            <span>Luo ja jaa varmuuskopio (JSON)</span>
+          </button>
 
-        {/* Paikallinen varmuuskopiointi ja tiedostojen tuonti (varatoiminto) */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-            Vaihtoehtoiset toiminnot (Offline / Tiedostot)
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Varmuuskopioi */}
-            <button
-              onClick={onBackupDrive}
-              className="flex items-center justify-center space-x-2 p-3 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 text-slate-700 dark:text-slate-300 font-semibold text-xs transition cursor-pointer"
-            >
-              <CloudUpload className="w-4 h-4 text-blue-500" />
-              <span>Jaa tai tallenna JSON-tiedosto</span>
-            </button>
-
-            {/* Palauta */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center space-x-2 p-3 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 text-slate-700 dark:text-slate-300 font-semibold text-xs transition cursor-pointer"
-            >
-              <FolderDown className="w-4 h-4 text-emerald-500" />
-              <span>Tuo varmuuskopio laitteelta (JSON)</span>
-            </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".json"
-              className="hidden"
-            />
-          </div>
+          {/* Palauta */}
+          <button
+            id="btn-restore-json"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center justify-center space-x-2 p-3.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-98 text-slate-700 dark:text-slate-300 font-semibold text-xs transition cursor-pointer"
+          >
+            <FolderDown className="w-4 h-4 text-emerald-500" />
+            <span>Palauta varmuuskopio tiedostosta</span>
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".json"
+            className="hidden"
+          />
         </div>
 
-        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">
-          💡 Varmuuskopiot tallentuvat Google Driveesi ja voit palauttaa ne millä tahansa laitteella kirjautumalla samalla Google-tilillä.
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3.5 leading-relaxed">
+          💡 Varmuuskopiotiedosto (.json) sisältää kaikki kirjatut ajotunnit, reitit, opetustiedot ja kilometrit. Voit tallentaa sen puhelimesi tiedostoihin, jakaa viestillä/sähköpostilla tai palauttaa uuteen laitteeseen milloin tahansa.
         </p>
       </div>
 
