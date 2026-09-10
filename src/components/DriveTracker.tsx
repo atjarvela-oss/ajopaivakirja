@@ -7,7 +7,7 @@ import {
   Timer, 
   MapPin, 
   Sparkles,
-  CloudUpload, 
+  ShieldCheck, 
   Radio, 
   Save, 
   X,
@@ -894,10 +894,10 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
                 />
               </div>
 
-              {/* Automaattinen Google Drive -varmuuskopiointi -info */}
-              <div className="flex items-center space-x-2.5 p-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 text-xs text-blue-700 dark:text-blue-300">
-                <CloudUpload className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
-                <span>Ajokerta varmuuskopioidaan automaattisesti Google Driveen tallennuksen yhteydessä.</span>
+              {/* Paikallinen tallennus -info */}
+              <div className="flex items-center space-x-2.5 p-3 rounded-xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 text-xs text-teal-800 dark:text-teal-300">
+                <ShieldCheck className="w-4 h-4 shrink-0 text-teal-600 dark:text-teal-400" />
+                <span>Ajokerta, reitti ja tilastot tallentuvat suoraan puhelimesi omaan muistiin.</span>
               </div>
 
             </div>

@@ -29,7 +29,7 @@ export async function shareOrDownloadFile(
   blob: Blob,
   filename: string,
   mimeType: string,
-  dialogTitle = 'Jaa tai tallenna Google Driveen'
+  dialogTitle = 'Jaa tai tallenna tiedosto'
 ): Promise<void> {
   const isNative = Capacitor.isNativePlatform();
 

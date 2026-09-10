@@ -18,7 +18,13 @@ import {
   GitBranch,
   Sparkles,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  MapPin,
+  Trash2,
+  EyeOff
 } from 'lucide-react';
 import type { ThemeMode } from '../services/themeService';
 import { 
@@ -45,6 +51,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   drivesCount,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isPolicyExpanded, setIsPolicyExpanded] = useState<boolean>(false);
 
   // Hereilläpito-asetus — tallennetaan paikallisesti
   const [keepAwakePref, setKeepAwakePref] = useState<boolean>(() => {
@@ -408,75 +415,182 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
       </div>
 
-      {/* 4. Tietoturvaseloste */}
+      {/* 6. Tietoturva- ja yksityisyysseloste */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-xs">
-        <div className="flex items-center space-x-3 mb-4">
-          <div className="p-2.5 rounded-xl bg-teal-100 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400">
-            <ShieldCheck className="w-5 h-5" />
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 rounded-xl bg-teal-100 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Tietoturva- ja yksityisyysseloste
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Henkilötietojen käsittely, paikallinen laitemuisti ja EU GDPR -periaatteet
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              Tietoturva- ja yksityisyysseloste
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Miten sovellus käsittelee tietojasi ja suojaa yksityisyyttäsi
-            </p>
-          </div>
+          <span className="hidden sm:inline-flex text-[11px] font-bold px-2.5 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800/60">
+            100 % Offline & Yksityinen
+          </span>
         </div>
 
         <div className="space-y-4 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
           
-          <div className="p-3.5 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200/60 dark:border-teal-900/40">
-            <div className="flex items-center space-x-2 font-bold text-teal-900 dark:text-teal-200 mb-1">
-              <Lock className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
-              <span>100 % Paikallinen tallennus laitteessasi</span>
+          {/* Keskeiset tietosuojalupaukset - 4 korttia */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="p-3.5 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200/70 dark:border-teal-900/50">
+              <div className="flex items-center space-x-2 font-bold text-teal-950 dark:text-teal-200 mb-1 text-xs">
+                <Lock className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span>100 % Paikallinen tallennus</span>
+              </div>
+              <p className="text-[11px] text-teal-900/80 dark:text-teal-300 leading-relaxed">
+                Kaikki ajokerrat, GPS-reitit ja opetustiedot tallennetaan yksinomaan omaan puhelimeesi. Sovelluksella ei ole ulkoisia pilvitietokantoja tai taustapalvelimia.
+              </p>
             </div>
-            <p className="text-xs text-teal-800 dark:text-teal-300 leading-relaxed">
-              Kaikki ajokerrat, GPS-reittipisteet, päivämäärät, ajotunnit sekä oppilaan ja opettajan henkilötiedot (nimi ja henkilötunnus) tallennetaan ainoastaan käyttäjän omaan puhelimeen paikalliseen laitemuistiin (LocalStorage).
-            </p>
+
+            <div className="p-3.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-900/50">
+              <div className="flex items-center space-x-2 font-bold text-blue-950 dark:text-blue-200 mb-1 text-xs">
+                <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span>GPS vain ajon aikana</span>
+              </div>
+              <p className="text-[11px] text-blue-900/80 dark:text-blue-300 leading-relaxed">
+                Puhelimen GPS-sijaintia käytetään vain silloin, kun ajon seuranta on aktiivisesti päällä ("Aloita ajo"). Seuranta katkeaa välittömästi ajon päättyessä.
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/70 dark:border-purple-900/50">
+              <div className="flex items-center space-x-2 font-bold text-purple-950 dark:text-purple-200 mb-1 text-xs">
+                <EyeOff className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                <span>Ei analytiikkaa tai mainoksia</span>
+              </div>
+              <p className="text-[11px] text-purple-900/80 dark:text-purple-300 leading-relaxed">
+                Sovellus ei sisällä evästeitä (cookies), käyttäjäseurantaa, mainoksia, telemetriaa eikä kaupallisia seurantakoodeja.
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/50">
+              <div className="flex items-center space-x-2 font-bold text-amber-950 dark:text-amber-200 mb-1 text-xs">
+                <Trash2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Täysi poisto- ja vientioikeus</span>
+              </div>
+              <p className="text-[11px] text-amber-900/80 dark:text-amber-300 leading-relaxed">
+                Voit poistaa yksittäisen ajokerran roskakorikuvakkeesta, viedä tiedot tiedostona tai tyhjentää kaikki tiedot poistamalla sovelluksen laitteeltasi.
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-2.5">
-            <div className="flex items-start space-x-2.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 shrink-0" />
-              <div>
-                <strong className="text-slate-900 dark:text-white">Ei ulkoisia pilvitietokantoja:</strong>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Sovelluksessa ei ole käytössä ulkopuolisia käyttäjätilejä, pilvitietokantoja tai taustajärjestelmiä. Tietojasi ei koskaan lähetetä kolmansille osapuolille.
-                </p>
-              </div>
-            </div>
+          {/* Painike koko selosteen avaamiseen / sulkemiseen */}
+          <button
+            type="button"
+            onClick={() => setIsPolicyExpanded(!isPolicyExpanded)}
+            className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
+          >
+            <span className="flex items-center space-x-2">
+              <FileText className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              <span>
+                {isPolicyExpanded 
+                  ? 'Piilota yksityiskohtainen tietosuoja- ja rekisteriseloste' 
+                  : 'Lue täydellinen tietosuoja- ja rekisteriseloste (EU GDPR)'}
+              </span>
+            </span>
+            {isPolicyExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
 
-            <div className="flex items-start space-x-2.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 shrink-0" />
+          {/* Yksityiskohtainen GDPR-seloste */}
+          {isPolicyExpanded && (
+            <div className="space-y-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-850/70 border border-slate-200 dark:border-slate-800 text-xs leading-relaxed text-slate-700 dark:text-slate-300 animate-in fade-in duration-200">
+              
               <div>
-                <strong className="text-slate-900 dark:text-white">Ei analytiikkaa tai seurantakoodeja:</strong>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Sovellus ei sisällä mainoksia, evästeitä (cookies), telemetriaa eikä kaupallisia seurantaohjelmia.
+                <h4 className="font-bold text-slate-900 dark:text-white text-xs mb-1">
+                  1. Rekisterinpitäjä ja tekninen yhteyshenkilö
+                </h4>
+                <p className="text-slate-600 dark:text-slate-400">
+                  Sovellus toimii käyttäjän henkilökohtaisena offline-apuvälineenä. Sovellukseen syötettyjen henkilötietojen (oppilaan ja opettajan tiedot) rekisterinpitäjänä toimii opetusluvan haltija tai oppilas itse. Sovelluksen tekninen kehittäjä ja julkaisija on Ari Järvelä (yhteydenotot: <a href="mailto:atjarvela@gmail.com" className="text-blue-600 dark:text-blue-400 hover:underline">atjarvela@gmail.com</a>).
                 </p>
               </div>
-            </div>
 
-            <div className="flex items-start space-x-2.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 shrink-0" />
               <div>
-                <strong className="text-slate-900 dark:text-white">GPS- ja sijaintitiedot:</strong>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Laitteen GPS-sijaintitietoja käytetään vain silloin, kun ajotila on aktiivisesti päällä ("Aloita ajo"). Tietoja käytetään ainoastaan ajetun matkan pituuden, nopeuden sekä ajoympäristön (taajama, maantie, pysäköinti) automaattiseen arviointiin. Sijaintia ei seurata taustalla sovelluksen ollessa suljettuna.
-                </p>
+                <h4 className="font-bold text-slate-900 dark:text-white text-xs mb-1">
+                  2. Käsiteltävät tiedot ja käsittelyn tarkoitus
+                </h4>
+                <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-400">
+                  <li>
+                    <strong className="text-slate-800 dark:text-slate-200">Opetuskortin tiedot:</strong> Oppilaan nimi ja henkilötunnus, opettajan nimi ja henkilötunnus sekä opetusluvan numero. Tietojen ainoa käyttötarkoitus on virallisen Liikenne- ja viestintävirasto Traficomin opetuskortin (E505sv) automaattinen täyttö PDF-muodossa ajokoetta varten. Tietojen syöttäminen on täysin vapaaehtoista.
+                  </li>
+                  <li>
+                    <strong className="text-slate-800 dark:text-slate-200">Ajopäiväkirjan merkinnät:</strong> Päivämäärät, aloitus- ja lopetusajat, ajotuntimäärät (50 min opetusajotunnit), ajetut kilometrit, keskinopeus, opetusteemat/aihekoodit (A–K) sekä sanalliset muistiinpanot ja taitotasoarviot.
+                  </li>
+                  <li>
+                    <strong className="text-slate-800 dark:text-slate-200">GPS-sijaintikoordinaatit:</strong> Reitin pituus- ja leveysasteet, aikaleimat ja nopeudet. Käytetään ajetun matkan pituuden mittaukseen ja ajoympäristön (taajama, kaupunki, maantie, käsittely) automaattiseen arviointiin.
+                  </li>
+                </ul>
               </div>
-            </div>
 
-            <div className="flex items-start space-x-2.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 shrink-0" />
               <div>
-                <strong className="text-slate-900 dark:text-white">Google Drive ja tiedostojen jako:</strong>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Google Drive -varmuuskopiointi käynnistyy automaattisesti aina ajokerran tallentamisen jälkeen (voidaan kytkeä pois asetuksista) tai manuaalisesti painamalla Varmuuskopioi-painiketta. Tiedostot siirtyvät suoraan omaan hallintaasi Androidin virallisen jakovalikon kautta.
+                <h4 className="font-bold text-slate-900 dark:text-white text-xs mb-1">
+                  3. Sijaintitietojen ja taustapaikannuksen käsittely
+                </h4>
+                <p className="text-slate-600 dark:text-slate-400">
+                  GPS-paikannusta käytetään ainoastaan silloin, kun käyttäjä on nimenomaisesti aloittanut ajon seurannan napauttamalla "Aloita ajo". Taustapaikannus (<span className="font-mono text-[10px]">ACCESS_BACKGROUND_LOCATION</span>) ja etualan palvelu (<span className="font-mono text-[10px]">FOREGROUND_SERVICE</span>) varmistavat, että reitti tallentuu katkeamattomasti myös näytön sammuessa tai muiden sovellusten ollessa auki. Androidin ilmoituspalkissa näkyy aina selkeä tilailmoitus <em>"Ajo käynnissä"</em>. Sijaintitiedot eivät koskaan siirry kolmansille osapuolille.
                 </p>
               </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 dark:text-white text-xs mb-1">
+                  4. Tietojen säilytyspaikka ja turvallisuus
+                </h4>
+                <p className="text-slate-600 dark:text-slate-400">
+                  Kaikki tiedot säilytetään laitteen omassa suojatussa sovellussäiliössä (LocalStorage). Sovelluksessa ei käytetä ulkoisia tietokantapalvelimia, eikä tietoja siirretä verkon yli ilman käyttäjän nimenomaista toimintoa.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 dark:text-white text-xs mb-1">
+                  5. Tietojen luovutus, vienti ja varmuuskopiointi
+                </h4>
+                <p className="text-slate-600 dark:text-slate-400">
+                  Tietoja ei luovuteta tai myydä kaupallisiin tarkoituksiin. Käyttäjä voi viedä omat tietonsa virallisena Traficom-opetuskorttina (PDF) tai varmuuskopiona (JSON). Tiedostot luodaan täysin paikallisesti laitteessasi, ja käyttäjä päättää itse laitteensa järjestelmäjakovalikon kautta, minne tai kenelle hän tiedoston tallentaa tai lähettää.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 dark:text-white text-xs mb-1">
+                  6. Karttapalvelu
+                </h4>
+                <p className="text-slate-600 dark:text-slate-400">
+                  Kartan taustakuvina käytetään OpenStreetMap-karttatiiliä. Karttatiilien lataus perustuu julkiseen karttarajapintaan, eikä OpenStreetMapille välitetä mitään käyttäjän henkilö- tai ajotietoja.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 dark:text-white text-xs mb-1">
+                  7. Rekisteröidyn oikeudet (EU GDPR)
+                </h4>
+                <p className="text-slate-600 dark:text-slate-400">
+                  Käyttäjällä on täysi oikeus tarkastaa, muuttaa ja poistaa kaikki tietonsa milloin tahansa:
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-400 mt-1">
+                  <li>Yksittäisen ajon tiedot voi poistaa suoraan Ajot-välilehdeltä roskakorikuvakkeesta.</li>
+                  <li>Opetustiedot (nimet ja henkilötunnukset) voi muokata tai tyhjentää Opetustiedot-välilehdellä.</li>
+                  <li>Kaikki tiedot poistuvat pysyvästi laitteelta poistamalla sovelluksen asennus tai tyhjentämällä sovelluksen tallennustila Androidin asetuksista.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 dark:text-white text-xs mb-1">
+                  8. Sovelluksen vaatimat laiteoikeudet (Android Permissions)
+                </h4>
+                <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-400">
+                  <li><strong className="text-slate-800 dark:text-slate-200">Sijainti:</strong> Ajetun matkan, nopeuden ja ajoympäristön mittaamiseen ajon aikana.</li>
+                  <li><strong className="text-slate-800 dark:text-slate-200">Taustasijainti & Etualan palvelu:</strong> Reitin katkeamattomaan tallennukseen puhelimen ollessa lukittuna.</li>
+                  <li><strong className="text-slate-800 dark:text-slate-200">Hereilläpito (WakeLock):</strong> Mahdollistaa näytön pitämisen päällä ajon aikana käyttäjän asetuksen mukaisesti.</li>
+                </ul>
+              </div>
+
             </div>
-          </div>
+          )}
 
         </div>
       </div>

@@ -12,10 +12,10 @@ Sovellus toimii helppokäyttöisenä opetuskorttina opetusluvalla suoritettavien
    - Sovellus aukeaa välittömästi ilman rekisteröinti- tai kirjautumisseinää.
    - Kaikki ajokerrat, reitit ja tilastot tallentuvat 100 % paikallisesti puhelimen tallennustilaan (offline-first).
 
-2. **Automaattinen varmuuskopiointi Google Driveen**:
-   - Sovellus varmuuskopioi ajopäiväkirjan automaattisesti jokaisen tallennetun ajon jälkeen (`ajopaivakirja_backup_YYYY-MM-DD.json`).
-   - Avaa Androidin järjestelmäjakovalikon, josta voi valita **Tallenna Google Driveen**. Voidaan myös kytkeä pois tai käynnistää manuaalisesti asetuksista.
-   - Varmuuskopion voi milloin tahansa palauttaa "Palauta"-painikkeella.
+2. **Varmuuskopiointi ja tietojen palautus (JSON)**:
+   - Sovellus luo täydellisen varmuuskopion ajopäiväkirjasta (`ajopaivakirja_backup_YYYY-MM-DD.json`).
+   - Avaa Androidin järjestelmäjakovalikon, josta tiedoston voi tallentaa puhelimen muistiin tai jakaa haluamaansa palveluun.
+   - Varmuuskopion voi milloin tahansa palauttaa "Palauta varmuuskopio tiedostosta" -painikkeella.
 
 3. **PDF-vienti**:
    - **PDF-vienti**: Selkeä, valmiiksi muotoiltu A4-kokoinen opetuskortti (oppilas- ja opettajatiedot, 50 min ajotuntilaskenta, K/A/B aihekoodit ja allekirjoitukset).
@@ -73,7 +73,7 @@ Syntynyt `.apk`-tiedosto voidaan asentaa suoraan opettajan puhelimeen!
 - `android/`: Täydellinen natiivi Android Studio -projekti (Gradle, AndroidManifest, Java/Kotlin).
 - `src/services/localDb.ts`: Paikallinen tietokanta (IndexedDB / LocalStorage).
 - `src/services/exportService.ts`: PDF-opetuskortin generointi (`jspdf`, `jspdf-autotable`).
-- `src/services/driveBackup.ts`: Google Drive -varmuuskopiopalvelu ja palautus.
+- `src/services/driveBackup.ts`: Varmuuskopiopalvelu ja palautus (JSON).
 - `src/services/environmentClassifier.ts`: Ajoympäristön automaattinen tunnistusalgoritmi.
 - `src/components/`: Käyttöliittymäkomponentit (ajotilan GPS-seuranta, Leaflet-kartta, taulukko, yhteenvedot).
 
