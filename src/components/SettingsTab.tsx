@@ -29,7 +29,8 @@ import {
   Fuel,
   Activity,
   Volume2,
-  VolumeX
+  VolumeX,
+  Loader2
 } from 'lucide-react';
 import type { ThemeMode } from '../services/themeService';
 import { 
@@ -97,6 +98,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
   const [obdConnected, setObdConnected] = useState<boolean>(false);
   const [obdMetrics, setObdMetrics] = useState<any>(null);
+  const [isConnectingObd, setIsConnectingObd] = useState<boolean>(false);
+  const [obdStatusMsg, setObdStatusMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [isTestingAudio, setIsTestingAudio] = useState<boolean>(false);
 
   useEffect(() => {
@@ -391,19 +394,44 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                   <>
                     <button
                       type="button"
+                      disabled={isConnectingObd}
                       onClick={async () => {
-                        const res = await obdManager.connectBluetooth();
-                        alert(res.message);
+                        setIsConnectingObd(true);
+                        setObdStatusMsg({ text: 'Etsitään lähellä olevia OBD2 BLE -laitteita...', type: 'info' });
+                        try {
+                          const res = await obdManager.connectBluetooth();
+                          if (res.success) {
+                            setObdStatusMsg({ text: res.message, type: 'success' });
+                          } else {
+                            setObdStatusMsg({ text: res.message, type: 'error' });
+                          }
+                        } catch (err: any) {
+                          setObdStatusMsg({ text: err?.message || 'Bluetooth-yhteysvirhe', type: 'error' });
+                        } finally {
+                          setIsConnectingObd(false);
+                        }
                       }}
-                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs flex items-center space-x-1.5 cursor-pointer transition"
+                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white text-xs font-semibold shadow-xs flex items-center space-x-1.5 cursor-pointer transition"
                     >
-                      <Bluetooth className="w-3.5 h-3.5" />
-                      <span>Etsi OBD2-laite</span>
+                      {isConnectingObd ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Etsitään...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Bluetooth className="w-3.5 h-3.5" />
+                          <span>Etsi OBD2-laite</span>
+                        </>
+                      )}
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => obdManager.startSimulator()}
+                      onClick={() => {
+                        obdManager.startSimulator();
+                        setObdStatusMsg({ text: 'OBD-simulaattori käynnistetty testidatalla.', type: 'success' });
+                      }}
                       className="px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-750 hover:bg-slate-300 text-slate-700 dark:text-slate-300 text-xs font-medium cursor-pointer transition"
                       title="Käynnistä realistinen testidata ilman fyysistä OBD-laitetta"
                     >
@@ -413,6 +441,37 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 )}
               </div>
             </div>
+
+            {/* OBD Tilaviesti / virheilmoitus */}
+            {obdStatusMsg && (
+              <div
+                className={`p-2.5 rounded-lg border text-xs flex items-center justify-between gap-2 transition ${
+                  obdStatusMsg.type === 'success'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                    : obdStatusMsg.type === 'error'
+                    ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
+                    : 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200'
+                }`}
+              >
+                <div className="flex items-center space-x-2 min-w-0">
+                  {obdStatusMsg.type === 'info' ? (
+                    <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-indigo-600 dark:text-indigo-400" />
+                  ) : obdStatusMsg.type === 'success' ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  )}
+                  <span className="truncate">{obdStatusMsg.text}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setObdStatusMsg(null)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs px-1 font-bold cursor-pointer"
+                >
+                  ×
+                </button>
+              </div>
+            )}
 
             {/* Reaaliaikaiset OBD-diagnostiikkatiedot jos yhdistetty */}
             {obdConnected && obdMetrics && (

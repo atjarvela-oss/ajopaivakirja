@@ -1,4 +1,6 @@
 import type { ObdDriveData } from '../types';
+import { Capacitor } from '@capacitor/core';
+import { BleClient, textToDataView } from '@capacitor-community/bluetooth-le';
 
 export interface ObdLiveMetrics {
   connected: boolean;
@@ -15,19 +17,28 @@ export interface ObdLiveMetrics {
   fuelType: 'gasoline' | 'diesel';
 }
 
-// Yleisimmät BLE OBD2 -sovittimien palvelu-UUID:t (ELM327 BLE, Vgate, OBDLink, Veepeak, iCar)
+// Yleisimmät BLE OBD2 -sovittimien palvelu-UUID:t (ELM327 BLE, Vgate, OBDLink, Veepeak, iCar, Viecar)
 const BLE_OBD_SERVICES = [
   '0000fff0-0000-1000-8000-00805f9b34fb',
   '0000ffe0-0000-1000-8000-00805f9b34fb',
   '000018f0-0000-1000-8000-00805f9b34fb',
-  '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC Transparent Serial
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
 ];
 
 class ObdBluetoothService {
+  // Web Bluetooth (selaintila)
   private bluetoothDevice: any = null;
   private gattServer: any = null;
   private rxCharacteristic: any = null;
   private txCharacteristic: any = null;
+
+  // Natiivi Capacitor Bluetooth LE (Android APK / iOS)
+  private nativeDeviceId: string | null = null;
+  private nativeServiceUuid: string | null = null;
+  private nativeNotifyUuid: string | null = null;
+  private nativeWriteUuid: string | null = null;
+  private bleInitialized = false;
 
   private isConnected = false;
   private isSimulated = false;
@@ -80,8 +91,13 @@ class ObdBluetoothService {
     return this.fuelType;
   }
 
-  public isAvailableInBrowser(): boolean {
+  public isAvailable(): boolean {
+    if (Capacitor.isNativePlatform()) return true;
     return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
+  }
+
+  public isAvailableInBrowser(): boolean {
+    return this.isAvailable();
   }
 
   public subscribe(cb: (metrics: ObdLiveMetrics) => void): () => void {
@@ -248,16 +264,201 @@ class ObdBluetoothService {
   }
 
   /**
-   * Käynnistää Web Bluetooth -haun ja yhdistää ELM327 BLE -laitteeseen
+   * Käynnistää Bluetooth-haun ja yhdistää ELM327 BLE -laitteeseen.
+   * Tukee automaattisesti sekä natiivia Android-sovellusta (Capacitor BLE)
+   * että verkkoselaimia (Web Bluetooth API).
    */
   public async connectBluetooth(): Promise<{ success: boolean; message: string }> {
-    if (!this.isAvailableInBrowser()) {
+    if (!this.isAvailable()) {
       return {
         success: false,
-        message: 'Laitteesi tai selaimesi ei tue Web Bluetoothia. Voit kokeilla OBD-simulaattoria!',
+        message: 'Laitteesi tai selaimesi ei tue Bluetoothia (Web Bluetooth). Voit kokeilla OBD-simulaattoria!',
       };
     }
 
+    if (Capacitor.isNativePlatform()) {
+      return await this.connectNativeBluetooth();
+    }
+
+    return await this.connectWebBluetooth();
+  }
+
+  /**
+   * Natiivi Android / iOS Bluetooth LE -yhteys Capacitor BLE -laajennuksella
+   */
+  private async connectNativeBluetooth(): Promise<{ success: boolean; message: string }> {
+    try {
+      if (!this.bleInitialized) {
+        await BleClient.initialize({ androidNeverForLocation: false });
+        this.bleInitialized = true;
+      }
+
+      // Tarkistetaan onko Bluetooth päällä puhelimessa
+      const enabled = await BleClient.isEnabled().catch(() => false);
+      if (!enabled) {
+        try {
+          await BleClient.requestEnable();
+        } catch {
+          return {
+            success: false,
+            message: 'Bluetooth ei ole päällä. Ota Bluetooth käyttöön puhelimen asetuksista ja yritä uudelleen.',
+          };
+        }
+      }
+
+      // Asetetaan suomenkieliset opasteet laitevalitsindialogiin
+      await BleClient.setDisplayStrings({
+        scanning: 'Etsitään lähellä olevia OBD2 BLE -sovittimia...',
+        cancel: 'Peruuta',
+        availableDevices: 'Valitse OBD2-laite',
+        noDeviceFound: 'OBD2-laitetta ei löytynyt. Varmista auton sytytysvirta!',
+      }).catch(() => {});
+
+      let selectedDevice: any = null;
+
+      try {
+        // Avataan natiivi Android BLE -laitehaku ja valintadialogi
+        selectedDevice = await BleClient.requestDevice({
+          optionalServices: BLE_OBD_SERVICES,
+        });
+      } catch (scanErr: any) {
+        const msg = scanErr?.message || String(scanErr);
+        if (msg.toLowerCase().includes('cancel')) {
+          return {
+            success: false,
+            message: 'OBD-laitteen haku peruutettiin.',
+          };
+        }
+
+        // Kokeillaan löytyykö paritettujen laitteiden joukosta (jos puhelimen BT-asetuksissa paritettu)
+        try {
+          const bonded = await BleClient.getBondedDevices();
+          const candidate = bonded.find(d => /obd|vgate|v-link|icar|elm|veepeak|viecar|konnwei/i.test(d.name || ''));
+          if (candidate) {
+            selectedDevice = candidate;
+          } else {
+            throw scanErr;
+          }
+        } catch {
+          throw scanErr;
+        }
+      }
+
+      if (!selectedDevice || !selectedDevice.deviceId) {
+        return {
+          success: false,
+          message: 'Laitetta ei valittu.',
+        };
+      }
+
+      const deviceId = selectedDevice.deviceId as string;
+      this.nativeDeviceId = deviceId;
+      this.deviceName = selectedDevice.name || 'OBD2 BLE Sovitin';
+
+      // Yhdistetään valittuun laitteeseen
+      await BleClient.connect(deviceId, () => {
+        this.handleDisconnect();
+      });
+
+      // Etsitään sopivat GATT-palvelut ja luku-/kirjoituskarakteristiikat
+      const services = await BleClient.getServices(deviceId);
+      let chosenService: string | null = null;
+      let notifyChar: string | null = null;
+      let writeChar: string | null = null;
+
+      // 1. Ensisijaisesti tunnetut OBD2-palvelut (FFF0, FFE0, 18F0, ISSC jne.)
+      for (const s of services) {
+        const norm = s.uuid.toLowerCase();
+        const isMatch = BLE_OBD_SERVICES.some(k => norm.includes(k.toLowerCase()) || k.toLowerCase().includes(norm));
+        if (isMatch) {
+          for (const c of s.characteristics) {
+            if ((c.properties.notify || c.properties.indicate) && !notifyChar) {
+              notifyChar = c.uuid;
+              chosenService = s.uuid;
+            }
+            if ((c.properties.write || c.properties.writeWithoutResponse) && !writeChar) {
+              writeChar = c.uuid;
+              chosenService = s.uuid;
+            }
+          }
+          if (notifyChar && writeChar) break;
+        }
+      }
+
+      // 2. Fallback: jos sovitin käyttää omaa kustomoitua UUID:tä, valitaan palvelu jossa on sekä notify että write
+      if (!notifyChar || !writeChar) {
+        for (const s of services) {
+          const norm = s.uuid.toLowerCase();
+          if (norm.includes('1800') || norm.includes('1801') || norm.includes('180a')) continue;
+          let localNotify: string | null = null;
+          let localWrite: string | null = null;
+          for (const c of s.characteristics) {
+            if ((c.properties.notify || c.properties.indicate) && !localNotify) {
+              localNotify = c.uuid;
+            }
+            if ((c.properties.write || c.properties.writeWithoutResponse) && !localWrite) {
+              localWrite = c.uuid;
+            }
+          }
+          if (localNotify && localWrite) {
+            chosenService = s.uuid;
+            notifyChar = localNotify;
+            writeChar = localWrite;
+            break;
+          }
+        }
+      }
+
+      if (!chosenService || !notifyChar || !writeChar) {
+        await BleClient.disconnect(deviceId).catch(() => {});
+        return {
+          success: false,
+          message: 'Laitteesta ei löytynyt OBD-sarjaporttia. Varmista että sovitin tukee BLE ELM327 -protokollaa.',
+        };
+      }
+
+      this.nativeServiceUuid = chosenService;
+      this.nativeNotifyUuid = notifyChar;
+      this.nativeWriteUuid = writeChar;
+
+      // Tilataan datan ilmoitukset autolta
+      await BleClient.startNotifications(
+        deviceId,
+        chosenService,
+        notifyChar,
+        (value: DataView) => {
+          this.handleIncomingData(value);
+        }
+      );
+
+      this.isConnected = true;
+      this.isSimulated = false;
+
+      await this.initElm327();
+      this.startPolling();
+      this.emitUpdate();
+
+      return {
+        success: true,
+        message: `Yhdistetty onnistuneesti laitteeseen: ${this.deviceName}`,
+      };
+    } catch (err: any) {
+      console.warn('Natiivi Bluetooth LE -yhteysvirhe:', err);
+      const msg = err?.message || String(err);
+      if (msg.toLowerCase().includes('cancel')) {
+        return { success: false, message: 'OBD-laitteen haku peruutettiin.' };
+      }
+      return {
+        success: false,
+        message: msg || 'Bluetooth-yhteyden muodostaminen epäonnistui. Varmista että auton virrat ovat päällä.',
+      };
+    }
+  }
+
+  /**
+   * Selaimen Web Bluetooth API -yhteys (Google Chrome, Edge)
+   */
+  private async connectWebBluetooth(): Promise<{ success: boolean; message: string }> {
     try {
       this.bluetoothDevice = await (navigator as any).bluetooth.requestDevice({
         filters: [
@@ -324,7 +525,7 @@ class ObdBluetoothService {
    * Alustaa ELM327-ohjaimen peruskomennoilla
    */
   private async initElm327() {
-    if (!this.txCharacteristic) return;
+    if (!this.txCharacteristic && !this.nativeDeviceId) return;
     const initCommands = [
       'ATZ\r',    // Reset ELM327
       'ATE0\r',   // Echo off
@@ -339,11 +540,17 @@ class ObdBluetoothService {
   }
 
   private async sendCommand(cmd: string) {
-    if (!this.txCharacteristic) return;
+    if (!this.isConnected) return;
+    this.lastCommandSent = cmd;
+
     try {
-      this.lastCommandSent = cmd;
-      const encoder = new TextEncoder();
-      await this.txCharacteristic.writeValue(encoder.encode(cmd));
+      if (this.nativeDeviceId && this.nativeServiceUuid && this.nativeWriteUuid) {
+        const data = textToDataView(cmd);
+        await BleClient.write(this.nativeDeviceId, this.nativeServiceUuid, this.nativeWriteUuid, data);
+      } else if (this.txCharacteristic) {
+        const encoder = new TextEncoder();
+        await this.txCharacteristic.writeValue(encoder.encode(cmd));
+      }
     } catch (e) {
       console.warn('Virhe OBD-komennon lähetyksessä:', e);
     }
@@ -363,7 +570,7 @@ class ObdBluetoothService {
     let pidIndex = 0;
 
     this.pollingTimer = setInterval(async () => {
-      if (!this.isConnected || !this.txCharacteristic) return;
+      if (!this.isConnected || (!this.txCharacteristic && !this.nativeDeviceId)) return;
       const cmd = pids[pidIndex];
       pidIndex = (pidIndex + 1) % pids.length;
       await this.sendCommand(cmd);
@@ -524,10 +731,30 @@ class ObdBluetoothService {
       clearInterval(this.simulationTimer);
       this.simulationTimer = null;
     }
+
+    if (this.nativeDeviceId) {
+      const devId = this.nativeDeviceId;
+      const sUuid = this.nativeServiceUuid;
+      const nUuid = this.nativeNotifyUuid;
+      this.nativeDeviceId = null;
+      this.nativeServiceUuid = null;
+      this.nativeNotifyUuid = null;
+      this.nativeWriteUuid = null;
+
+      if (sUuid && nUuid) {
+        BleClient.stopNotifications(devId, sUuid, nUuid).catch(() => {});
+      }
+      BleClient.disconnect(devId).catch(() => {});
+    }
+
     if (this.bluetoothDevice && this.bluetoothDevice.gatt?.connected) {
       try {
         this.bluetoothDevice.gatt.disconnect();
       } catch {}
+      this.bluetoothDevice = null;
+      this.gattServer = null;
+      this.rxCharacteristic = null;
+      this.txCharacteristic = null;
     }
 
     this.handleDisconnect();
