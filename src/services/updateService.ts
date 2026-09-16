@@ -2,6 +2,8 @@ export const APP_VERSION: string = typeof __APP_VERSION__ !== 'undefined' ? __AP
 
 export const DEFAULT_GITHUB_REPO = 'atjarvela-oss/ajopaivakirja';
 const STORAGE_REPO_KEY = 'opetuslupa_github_repo';
+const STORAGE_DISMISSED_VERSION_KEY = 'opetuslupa_dismissed_update_version';
+const STORAGE_AUTO_CHECK_KEY = 'opetuslupa_auto_update_check';
 
 export interface UpdateCheckResult {
   hasUpdate: boolean;
@@ -12,6 +14,48 @@ export interface UpdateCheckResult {
   downloadUrl: string;
   publishedAt?: string;
   error?: string;
+}
+
+/**
+ * Tunnistaa onko sovellus käynnissä kehitysympäristössä (Vite dev, localhost tai Cloud Run -esikatselu).
+ * Kehitysympäristössä automaattisia GitHub-päivitysilmoituksia ei tule koskaan näyttää häiritsemässä.
+ */
+export function isDevEnvironment(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (import.meta.env.DEV) return true;
+  const host = window.location.hostname.toLowerCase();
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.includes('run.app') ||
+    host.includes('webcontainer') ||
+    host.includes('ai.studio') ||
+    host.includes('aistudio')
+  );
+}
+
+export function isDismissedUpdate(version: string): boolean {
+  if (typeof window === 'undefined') return false;
+  const dismissed = localStorage.getItem(STORAGE_DISMISSED_VERSION_KEY);
+  return dismissed === version;
+}
+
+export function dismissUpdate(version: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(STORAGE_DISMISSED_VERSION_KEY, version);
+}
+
+export function isAutoUpdateCheckEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  // Kehitysympäristössä oletusarvo on AINA pois päältä
+  if (isDevEnvironment()) return false;
+  const saved = localStorage.getItem(STORAGE_AUTO_CHECK_KEY);
+  return saved === null ? true : saved === 'true';
+}
+
+export function setAutoUpdateCheckEnabled(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(STORAGE_AUTO_CHECK_KEY, String(enabled));
 }
 
 export function getGitHubRepo(): string {

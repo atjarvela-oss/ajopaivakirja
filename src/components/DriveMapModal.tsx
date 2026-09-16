@@ -2,12 +2,19 @@ import React, { useEffect, useRef, useState } from 'react';
 import { 
   X, 
   Check, 
-  Save
+  Save,
+  Sparkles,
+  Volume2,
+  VolumeX,
+  Fuel,
+  Share2,
 } from 'lucide-react';
 import L from 'leaflet';
 import type { DriveSession } from '../types';
 import { ENVIRONMENT_CONFIG } from '../services/environmentClassifier';
 import { updateLocalDrive } from '../services/localDb';
+import { speakDrivingReport, stopSpeakingReport } from '../services/drivingReportService';
+import { DriveShareModal } from './DriveShareModal';
 
 interface DriveMapModalProps {
   drive: DriveSession | null;
@@ -26,6 +33,20 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
   const [notesText, setNotesText] = useState(drive?.notes || '');
   const [teacherNotes, setTeacherNotes] = useState(drive?.teacherNotes || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      stopSpeakingReport();
+    };
+  }, []);
+
+  const handleClose = () => {
+    stopSpeakingReport();
+    setIsSpeaking(false);
+    onClose();
+  };
 
   useEffect(() => {
     if (drive) {
@@ -97,6 +118,35 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
         opacity: 1,
         fillOpacity: 1,
       }).addTo(map).bindPopup('Lopetuspiste');
+
+      // Ajotapa-tapahtumien merkit kartalle (äkkijarrutukset, tiukat mutkat, moottorin sammumiset)
+      if (drive.drivingBehavior && drive.drivingBehavior.events) {
+        drive.drivingBehavior.events.forEach((ev) => {
+          if (ev.lat && ev.lng) {
+            const isBrake = ev.type === 'hard_brake';
+            const isTurn = ev.type === 'hard_turn';
+            const isStall = ev.type === 'engine_stall';
+
+            const color = isBrake ? '#e11d48' : isTurn ? '#f59e0b' : isStall ? '#9333ea' : '#3b82f6';
+            const label = isBrake 
+              ? `Äkkijarrutus (${ev.value ? ev.value.toFixed(1) + ' m/s²' : ''})` 
+              : isTurn 
+              ? `Vauhdikas mutka (${ev.value ? ev.value.toFixed(1) + ' m/s²' : ''})` 
+              : isStall 
+              ? 'Moottorin sammuminen' 
+              : ev.description;
+
+            L.circleMarker([ev.lat, ev.lng], {
+              radius: 6,
+              fillColor: color,
+              color: '#ffffff',
+              weight: 2,
+              opacity: 1,
+              fillOpacity: 0.9,
+            }).addTo(map).bindPopup(`<strong>${label}</strong><br/><span style="font-size: 11px; color: #64748b;">${new Date(ev.timestamp).toLocaleTimeString('fi-FI')}</span>`);
+          }
+        });
+      }
 
       // Sovitetaan kartta reittiin
       if (polylineBounds.isValid()) {
@@ -193,7 +243,7 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
           </div>
 
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <X className="w-5 h-5" />
@@ -276,6 +326,128 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
             </div>
           </div>
 
+          {/* Ajotavan analyysi, OBD-kulutus ja Sanallinen palaute */}
+          {(drive.drivingBehavior || drive.obdData) && (
+            <div className="p-4 rounded-xl bg-linear-to-br from-indigo-50/70 to-blue-50/50 dark:from-indigo-950/40 dark:to-slate-850/60 border border-indigo-200/80 dark:border-indigo-800/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" />
+                  <h4 className="text-xs sm:text-sm font-bold text-indigo-950 dark:text-indigo-200">
+                    Ajotapa-analyysi & Sanallinen raportti
+                  </h4>
+                </div>
+
+                <div className="flex items-center space-x-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowShareModal(true)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-xs"
+                    title="Jaa ajotapakooste (PNG-kuva tai teksti)"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                    <span>Jaa kooste</span>
+                  </button>
+
+                  {drive.drivingBehavior?.verbalReport && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isSpeaking) {
+                          stopSpeakingReport();
+                          setIsSpeaking(false);
+                        } else {
+                          const ok = speakDrivingReport(drive.drivingBehavior!.verbalReport!);
+                          if (ok) setIsSpeaking(true);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer ${
+                        isSpeaking
+                          ? 'bg-rose-600 text-white shadow-sm'
+                          : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm'
+                      }`}
+                      title={isSpeaking ? 'Pysäytä puhe' : 'Kuuntele raportti ääneen'}
+                    >
+                      {isSpeaking ? (
+                        <>
+                          <VolumeX className="w-3.5 h-3.5" />
+                          <span>Pysäytä</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="w-3.5 h-3.5" />
+                          <span>Kuuntele</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Tunnusluvut */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                {drive.drivingBehavior && (
+                  <>
+                    <div className="p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-indigo-100 dark:border-indigo-900/50">
+                      <div className="text-[10px] text-slate-500">Tasaisuusindeksi</div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-white">
+                        {drive.drivingBehavior.smoothnessScore}/100
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-indigo-100 dark:border-indigo-900/50">
+                      <div className="text-[10px] text-slate-500">Äkkijarrutukset</div>
+                      <div className={`text-sm font-bold ${drive.drivingBehavior.hardBrakesCount > 0 ? 'text-rose-600' : 'text-slate-900 dark:text-white'}`}>
+                        {drive.drivingBehavior.hardBrakesCount} kpl
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-indigo-100 dark:border-indigo-900/50">
+                      <div className="text-[10px] text-slate-500">Vauhdikkaat mutkat</div>
+                      <div className={`text-sm font-bold ${drive.drivingBehavior.hardTurnsCount > 0 ? 'text-amber-600' : 'text-slate-900 dark:text-white'}`}>
+                        {drive.drivingBehavior.hardTurnsCount} kpl
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-indigo-100 dark:border-indigo-900/50">
+                      <div className="text-[10px] text-slate-500">Sammumiset</div>
+                      <div className={`text-sm font-bold ${drive.drivingBehavior.engineStallsCount > 0 ? 'text-purple-600' : 'text-slate-900 dark:text-white'}`}>
+                        {drive.drivingBehavior.engineStallsCount} kpl
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* OBD-polttoainetieto */}
+              {drive.obdData && drive.obdData.connected && (
+                <div className="p-2.5 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between text-xs text-emerald-900 dark:text-emerald-200">
+                  <div className="flex items-center space-x-1.5">
+                    <Fuel className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="font-medium">Polttoaineen keskikulutus:</span>
+                    <strong>{drive.obdData.avgFuelConsumptionL100Km || '—'} l/100 km</strong>
+                    {drive.obdData.avgFuelRateLitersPerHour !== undefined && (
+                      <span className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                        (virtaus {drive.obdData.avgFuelRateLitersPerHour} L/h{drive.obdData.fuelRateSupported ? ' PID 5E' : ''})
+                      </span>
+                    )}
+                  </div>
+                  {drive.obdData.totalFuelUsedLiters !== undefined && (
+                    <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                      yht. {drive.obdData.totalFuelUsedLiters} L
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Sanallinen tekstiraportti */}
+              {drive.drivingBehavior?.verbalReport && (
+                <div className="p-3 rounded-lg bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-700 dark:text-slate-200 leading-relaxed font-sans">
+                  {drive.drivingBehavior.verbalReport}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Aiheet ja muistiinpanot */}
           <div className="space-y-3">
             <div>
@@ -326,9 +498,18 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50 flex justify-end">
+        <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50 flex justify-between items-center">
           <button
-            onClick={onClose}
+            type="button"
+            onClick={() => setShowShareModal(true)}
+            className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition flex items-center space-x-1.5 cursor-pointer"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Jaa ajotapakooste (PNG)</span>
+          </button>
+
+          <button
+            onClick={handleClose}
             className="px-4 py-2 text-xs sm:text-sm font-medium rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition"
           >
             Sulje
@@ -336,6 +517,13 @@ export const DriveMapModal: React.FC<DriveMapModalProps> = ({
         </div>
 
       </div>
+
+      {/* Jaettavan ajotapakoosteen modaali */}
+      <DriveShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        data={drive}
+      />
     </div>
   );
 };

@@ -7,11 +7,15 @@ import {
   Clock, 
   Search, 
   Eye, 
-  FileDown
+  FileDown,
+  Fuel,
+  Activity,
+  Share2
 } from 'lucide-react';
 import type { DriveSession, EnvironmentType } from '../types';
 import { ENVIRONMENT_CONFIG } from '../services/environmentClassifier';
 import { deleteLocalDrive } from '../services/localDb';
+import { DriveShareModal } from './DriveShareModal';
 
 interface DriveTableProps {
   drives: DriveSession[];
@@ -28,6 +32,7 @@ export const DriveTable: React.FC<DriveTableProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [envFilter, setEnvFilter] = useState<EnvironmentType | 'all'>('all');
+  const [sharingDrive, setSharingDrive] = useState<DriveSession | null>(null);
 
   // Suodatus
   const filteredDrives = drives.filter((d) => {
@@ -61,6 +66,11 @@ export const DriveTable: React.FC<DriveTableProps> = ({
       'Keskinopeus (km/h)',
       'Huippunopeus (km/h)',
       'Ajoympäristö',
+      'Tasaisuusindeksi (0-100)',
+      'Äkkijarrutukset (kpl)',
+      'Vauhdikkaat mutkat (kpl)',
+      'Moottorin sammumiset (kpl)',
+      'OBD Keskikulutus (l/100km)',
       'Ympäristöjakauma',
       'Aiheet ja muistiinpanot'
     ];
@@ -80,6 +90,11 @@ export const DriveTable: React.FC<DriveTableProps> = ({
         `"${d.avgSpeedKmH.toString().replace('.', ',')}"`,
         `"${d.maxSpeedKmH.toString().replace('.', ',')}"`,
         `"${d.environment.primary.toUpperCase()}"`,
+        d.drivingBehavior ? d.drivingBehavior.smoothnessScore : '—',
+        d.drivingBehavior ? d.drivingBehavior.hardBrakesCount : '—',
+        d.drivingBehavior ? d.drivingBehavior.hardTurnsCount : '—',
+        d.drivingBehavior ? d.drivingBehavior.engineStallsCount : '—',
+        d.obdData?.avgFuelConsumptionL100Km ? `"${d.obdData.avgFuelConsumptionL100Km.toString().replace('.', ',')}"` : '—',
         `"${dist}"`,
         `"${(d.notes || '').replace(/"/g, '""')}"`
       ].join(';');
@@ -208,6 +223,7 @@ export const DriveTable: React.FC<DriveTableProps> = ({
                 <th className="px-4 py-3">Matka</th>
                 <th className="px-4 py-3">Keskinopeus</th>
                 <th className="px-4 py-3">Ajoympäristö</th>
+                <th className="px-4 py-3">Ajotapa & Kulutus</th>
                 <th className="px-4 py-3">Aiheet ja muistiinpanot</th>
                 <th className="px-4 py-3 text-right no-print">Toiminnot</th>
               </tr>
@@ -260,6 +276,37 @@ export const DriveTable: React.FC<DriveTableProps> = ({
                       </span>
                     </td>
 
+                    {/* Ajotapa & Kulutus */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {drive.drivingBehavior || drive.obdData ? (
+                        <div className="flex flex-col space-y-0.5 text-xs">
+                          {drive.drivingBehavior && (
+                            <span className="flex items-center space-x-1 font-semibold text-slate-800 dark:text-slate-200">
+                              <Activity className="w-3 h-3 text-indigo-500 shrink-0" />
+                              <span>Tasaisuus: {drive.drivingBehavior.smoothnessScore}/100</span>
+                            </span>
+                          )}
+                          {drive.obdData && drive.obdData.avgFuelConsumptionL100Km ? (
+                            <span className="flex items-center space-x-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium" title={drive.obdData.avgFuelRateLitersPerHour ? `Keskivirtaus: ${drive.obdData.avgFuelRateLitersPerHour} L/h` : undefined}>
+                              <Fuel className="w-3 h-3 shrink-0" />
+                              <span>
+                                {drive.obdData.avgFuelConsumptionL100Km} l/100km
+                                {drive.obdData.avgFuelRateLitersPerHour ? ` (${drive.obdData.avgFuelRateLitersPerHour} L/h)` : ''}
+                              </span>
+                            </span>
+                          ) : null}
+                          {drive.drivingBehavior && (drive.drivingBehavior.hardBrakesCount > 0 || drive.drivingBehavior.engineStallsCount > 0) && (
+                            <span className="text-[10px] text-rose-500 font-medium">
+                              {drive.drivingBehavior.hardBrakesCount > 0 && `${drive.drivingBehavior.hardBrakesCount} jarrutusta `}
+                              {drive.drivingBehavior.engineStallsCount > 0 && `${drive.drivingBehavior.engineStallsCount} sammumista`}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-xs">—</span>
+                      )}
+                    </td>
+
                     {/* Muistiinpanot */}
                     <td className="px-4 py-3 max-w-xs truncate text-xs text-slate-600 dark:text-slate-300">
                       {drive.notes || <span className="text-slate-400 italic">-</span>}
@@ -268,6 +315,16 @@ export const DriveTable: React.FC<DriveTableProps> = ({
                     {/* Toiminnot */}
                     <td className="px-4 py-3 whitespace-nowrap text-right no-print">
                       <div className="flex items-center justify-end space-x-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSharingDrive(drive);
+                          }}
+                          className="p-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition"
+                          title="Jaa ajotapakooste (PNG/teksti)"
+                        >
+                          <Share2 className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -307,6 +364,12 @@ export const DriveTable: React.FC<DriveTableProps> = ({
         </div>
       </div>
 
+      {/* Jaettavan ajotapakoosteen modaali */}
+      <DriveShareModal
+        isOpen={!!sharingDrive}
+        onClose={() => setSharingDrive(null)}
+        data={sharingDrive}
+      />
     </div>
   );
 };

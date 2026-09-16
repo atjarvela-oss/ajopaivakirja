@@ -22,6 +22,43 @@ export interface DriveEnvironment {
   manualOverride?: boolean;
 }
 
+export interface DrivingEvent {
+  id: string;
+  type: 'hard_brake' | 'rapid_accel' | 'hard_turn' | 'engine_stall';
+  timestamp: number;
+  severity?: 'mild' | 'moderate' | 'severe';
+  speedKmH?: number;
+  lat?: number;
+  lng?: number;
+  value?: number; // esim. jarrutuskiihtyvyys m/s² tai G-voima
+  description: string;
+}
+
+export interface DrivingBehavior {
+  smoothnessScore: number; // 0 - 100
+  ecoScore: number;        // 0 - 100
+  hardBrakesCount: number;
+  rapidAccelsCount: number;
+  hardTurnsCount: number;
+  engineStallsCount: number;
+  events: DrivingEvent[];
+  verbalReport?: string;   // Sanallinen pedagoginen arvio
+}
+
+export interface ObdDriveData {
+  connected: boolean;
+  deviceName?: string;
+  isSimulated?: boolean;
+  avgFuelConsumptionL100Km?: number; // l/100km
+  totalFuelUsedLiters?: number;       // litraa
+  avgFuelRateLitersPerHour?: number;  // L/h (EOBD PID 5E Engine Fuel Rate)
+  maxFuelRateLitersPerHour?: number;  // L/h
+  fuelRateSupported?: boolean;        // Onko auton ECU palauttanut PID 5E Engine Fuel Rate -arvon
+  avgRpm?: number;
+  maxRpm?: number;
+  fuelType?: 'gasoline' | 'diesel';
+}
+
 export interface DriveSession {
   id: string;
   startTime: string; // ISO 8601
@@ -36,6 +73,8 @@ export interface DriveSession {
   notes: string;                // Aiheen tarkennus (esim. "Taskupysäköinti" tai "Liittymät")
   teacherNotes?: string;
   studentName?: string;
+  drivingBehavior?: DrivingBehavior;
+  obdData?: ObdDriveData;
   createdAt: string;
 }
 

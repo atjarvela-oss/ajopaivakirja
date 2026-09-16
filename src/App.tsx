@@ -20,7 +20,14 @@ import { backupToGoogleDrive, restoreFromBackupFile } from './services/driveBack
 import { getStoredTheme, applyTheme, type ThemeMode } from './services/themeService';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { UpdateNotification } from './components/UpdateNotification';
-import { checkForAppUpdate, type UpdateCheckResult } from './services/updateService';
+import { 
+  checkForAppUpdate, 
+  isDevEnvironment, 
+  isAutoUpdateCheckEnabled, 
+  isDismissedUpdate, 
+  dismissUpdate, 
+  type UpdateCheckResult 
+} from './services/updateService';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('yhteenveto');
@@ -85,18 +92,20 @@ export function App() {
   useEffect(() => {
     refreshDrives();
 
-    // Tarkistetaan GitHub-päivitykset taustalla 2 sekunnin kuluttua käynnistyksestä
-    const updateTimer = setTimeout(() => {
-      checkForAppUpdate()
-        .then((res) => {
-          if (res.hasUpdate) {
-            setAvailableUpdate(res);
-          }
-        })
-        .catch(() => {});
-    }, 2000);
+    // Tarkistetaan GitHub-päivitykset taustalla vain tuotantosovelluksessa (ei kehitysympäristössä)
+    if (!isDevEnvironment() && isAutoUpdateCheckEnabled()) {
+      const updateTimer = setTimeout(() => {
+        checkForAppUpdate()
+          .then((res) => {
+            if (res.hasUpdate && !isDismissedUpdate(res.latestVersion)) {
+              setAvailableUpdate(res);
+            }
+          })
+          .catch(() => {});
+      }, 3000);
 
-    return () => clearTimeout(updateTimer);
+      return () => clearTimeout(updateTimer);
+    }
   }, []);
 
   const handleUpdateTeachingInfo = (info: TeachingInfo) => {
@@ -260,10 +269,16 @@ export function App() {
         onDriveSaved={handleDriveSaved}
       />
 
-      {/* Päivityshoksautus / Ilmoitus uuden version saapuessa */}
+      {/* Päivityshoksautus / Ilmoitus uuden version saapuessa (vain tuotannossa ja kun ei ajeta) */}
       <UpdateNotification
         updateInfo={availableUpdate}
-        onDismiss={() => setAvailableUpdate(null)}
+        isDriving={isDriving || activeTab === 'ajo'}
+        onDismiss={() => {
+          if (availableUpdate?.latestVersion) {
+            dismissUpdate(availableUpdate.latestVersion);
+          }
+          setAvailableUpdate(null);
+        }}
       />
 
     </div>
