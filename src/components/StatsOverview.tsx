@@ -6,8 +6,8 @@ import {
   TrendingUp,
   Compass
 } from 'lucide-react';
-import type { OverallStats, EnvironmentType } from '../types';
-import { ENVIRONMENT_CONFIG } from '../services/environmentClassifier';
+import type { OverallStats, TraficomTopicCode } from '../types';
+import { TRAFICOM_TOPIC_CONFIG } from '../services/environmentClassifier';
 
 interface StatsOverviewProps {
   stats: OverallStats;
@@ -111,35 +111,54 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ stats }) => {
 
       </div>
 
-      {/* Ajoympäristöjen erittely */}
+      {/* Ajoympäristöjen jakautuminen (Traficom-kategoriat) */}
       <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 flex items-center space-x-1.5">
           <Compass className="w-4 h-4 text-blue-500" />
           <span>Ajoympäristöjen jakautuminen (Opetussuunnitelma)</span>
         </h4>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {(Object.keys(ENVIRONMENT_CONFIG) as EnvironmentType[]).map((envKey) => {
-            const cfg = ENVIRONMENT_CONFIG[envKey];
-            const data = stats.byEnvironment[envKey];
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(['K', 'A', 'B'] as TraficomTopicCode[]).map((code) => {
+            const cfg = TRAFICOM_TOPIC_CONFIG[code];
+            const data = stats.byTopicCode?.[code] || { count: 0, durationSeconds: 0, distanceKm: 0 };
             const hours = (data.durationSeconds / 3600).toFixed(1);
+            const lessons50Min = (data.durationSeconds / (50 * 60)).toFixed(1);
 
             return (
               <div 
-                key={envKey} 
-                className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-850/60"
+                key={code} 
+                className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-850/60 flex flex-col justify-between"
               >
-                <div className="flex items-center space-x-1.5 mb-1.5">
-                  <span className={`w-2.5 h-2.5 rounded-full`} style={{ backgroundColor: cfg.bgLight }} />
-                  <span className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                    {cfg.label.split(' / ')[0]}
-                  </span>
+                <div>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className={`w-5 h-5 rounded flex items-center justify-center font-black text-xs border shrink-0 ${cfg.badgeClass}`}>
+                      {code}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
+                        {cfg.title}
+                      </span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
+                        {cfg.sublabel}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-baseline space-x-1.5 my-1">
+                    <span className="text-xl font-extrabold text-slate-900 dark:text-white">
+                      {hours}
+                    </span>
+                    <span className="text-xs font-normal text-slate-500">h</span>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500 ml-1">
+                      ({lessons50Min} ajotuntia)
+                    </span>
+                  </div>
                 </div>
-                <div className="text-lg font-bold text-slate-900 dark:text-white">
-                  {hours} <span className="text-xs font-normal text-slate-500">h</span>
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {data.distanceKm} km • {data.count} ajoa
+
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between">
+                  <span>{data.distanceKm} km</span>
+                  <span>{data.count} {data.count === 1 ? 'ajo' : 'ajoa'}</span>
                 </div>
               </div>
             );

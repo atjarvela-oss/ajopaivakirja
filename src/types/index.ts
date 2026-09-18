@@ -93,7 +93,7 @@ export interface OverallStats {
   totalDistanceKm: number;
   lessonHours50Min: number; // Ajotunnit (50 min / tunti)
   byEnvironment: Record<EnvironmentType, { count: number; durationSeconds: number; distanceKm: number }>;
-  byTopicCode: Record<TraficomTopicCode, { count: number; durationSeconds: number }>;
+  byTopicCode: Record<TraficomTopicCode, { count: number; durationSeconds: number; distanceKm: number }>;
 }
 
 export interface BackupPayload {

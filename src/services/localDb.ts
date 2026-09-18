@@ -1,4 +1,5 @@
-import type { DriveSession, OverallStats, TeachingInfo, EnvironmentType } from '../types';
+import type { DriveSession, OverallStats, TeachingInfo, EnvironmentType, TraficomTopicCode } from '../types';
+import { mapEnvironmentToTraficomCode } from './environmentClassifier';
 
 const STORAGE_DRIVES_KEY = 'opetuslupa_android_drives_clean_v2';
 const STORAGE_INFO_KEY = 'opetuslupa_android_teaching_info_v2';
@@ -103,9 +104,9 @@ export function calculateOverallStats(drives: DriveSession[]): OverallStats {
       pysakointi: { count: 0, durationSeconds: 0, distanceKm: 0 },
     },
     byTopicCode: {
-      K: { count: 0, durationSeconds: 0 },
-      A: { count: 0, durationSeconds: 0 },
-      B: { count: 0, durationSeconds: 0 },
+      K: { count: 0, durationSeconds: 0, distanceKm: 0 },
+      A: { count: 0, durationSeconds: 0, distanceKm: 0 },
+      B: { count: 0, durationSeconds: 0, distanceKm: 0 },
     },
   };
 
@@ -113,17 +114,18 @@ export function calculateOverallStats(drives: DriveSession[]): OverallStats {
     stats.totalDurationSeconds += d.durationSeconds;
     stats.totalDistanceKm += d.distanceKm;
 
-    const env = d.environment.primary;
-    if (stats.byEnvironment[env]) {
+    const env = d.environment?.primary;
+    if (env && stats.byEnvironment[env]) {
       stats.byEnvironment[env].count++;
       stats.byEnvironment[env].durationSeconds += d.durationSeconds;
       stats.byEnvironment[env].distanceKm += d.distanceKm;
     }
 
-    const topic = d.topicCode || 'A';
+    const topic: TraficomTopicCode = d.topicCode || (env ? mapEnvironmentToTraficomCode(env) : 'A');
     if (stats.byTopicCode[topic]) {
       stats.byTopicCode[topic].count++;
       stats.byTopicCode[topic].durationSeconds += d.durationSeconds;
+      stats.byTopicCode[topic].distanceKm += d.distanceKm;
     }
   });
 
@@ -132,6 +134,9 @@ export function calculateOverallStats(drives: DriveSession[]): OverallStats {
   stats.totalDistanceKm = Number(stats.totalDistanceKm.toFixed(1));
   for (const key of Object.keys(stats.byEnvironment) as EnvironmentType[]) {
     stats.byEnvironment[key].distanceKm = Number(stats.byEnvironment[key].distanceKm.toFixed(1));
+  }
+  for (const key of Object.keys(stats.byTopicCode) as TraficomTopicCode[]) {
+    stats.byTopicCode[key].distanceKm = Number(stats.byTopicCode[key].distanceKm.toFixed(1));
   }
 
   return stats;

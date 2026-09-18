@@ -50,9 +50,9 @@ export function App() {
       pysakointi: { count: 0, durationSeconds: 0, distanceKm: 0 },
     },
     byTopicCode: {
-      K: { count: 0, durationSeconds: 0 },
-      A: { count: 0, durationSeconds: 0 },
-      B: { count: 0, durationSeconds: 0 },
+      K: { count: 0, durationSeconds: 0, distanceKm: 0 },
+      A: { count: 0, durationSeconds: 0, distanceKm: 0 },
+      B: { count: 0, durationSeconds: 0, distanceKm: 0 },
     },
   });
 
