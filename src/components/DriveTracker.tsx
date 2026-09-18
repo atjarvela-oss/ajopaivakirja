@@ -898,9 +898,9 @@ export const DriveTracker: React.FC<DriveTrackerProps> = ({
                         </>
                       )}
                     </span>
-                    {obdMetrics.fuelRateSupported && (
+                    {obdMetrics.fuelCalculationSource && (
                       <span className="px-1 py-0.2 text-[8px] font-bold rounded bg-emerald-200/80 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 uppercase tracking-wider">
-                        5E
+                        {obdMetrics.fuelCalculationSource === 'PID 5E' ? '5E' : obdMetrics.fuelCalculationSource === 'MAF (PID 10)' ? 'MAF' : 'RPM'}
                       </span>
                     )}
                   </span>

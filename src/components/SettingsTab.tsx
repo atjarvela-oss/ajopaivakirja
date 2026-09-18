@@ -475,26 +475,54 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
             {/* Reaaliaikaiset OBD-diagnostiikkatiedot jos yhdistetty */}
             {obdConnected && obdMetrics && (
-              <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center space-x-2">
-                  <Bluetooth className="w-4 h-4 text-emerald-600 animate-pulse shrink-0" />
-                  <span className="font-semibold">{obdMetrics.deviceName || 'OBD2 Yhdistetty'}</span>
-                  {obdMetrics.fuelRateSupported && (
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-200/80 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 text-[10px] font-bold uppercase tracking-wider">
-                      EOBD PID 5E
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2">
+                    <Bluetooth className="w-4 h-4 text-emerald-600 animate-pulse shrink-0" />
+                    <span className="font-bold">{obdMetrics.deviceName || 'OBD2 Yhdistetty'}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-200/80 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 text-[10px] font-bold tracking-wider">
+                      Lähde: {obdMetrics.fuelCalculationSource || 'RPM'}
+                    </span>
+                  </div>
+                  {obdMetrics.rxPacketsCount > 0 && (
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-md font-mono">
+                      Vastauksia: {obdMetrics.rxPacketsCount}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center space-x-3 text-[11px]">
-                  <span>RPM: <strong>{obdMetrics.rpm}</strong></span>
-                  <span>Polttoainevirtaus: <strong>{obdMetrics.fuelRateLitersPerHour} L/h</strong></span>
-                  {obdMetrics.averageConsumptionL100Km > 0 && (
-                    <span>Keskikulutus: <strong>{obdMetrics.averageConsumptionL100Km} l/100km</strong></span>
-                  )}
-                  {obdMetrics.totalFuelUsedLiters > 0 && (
-                    <span>Yht: <strong>{obdMetrics.totalFuelUsedLiters} L</strong></span>
-                  )}
+
+                {/* Tilan kuvaus */}
+                {obdMetrics.connectionStatusText && (
+                  <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-medium">
+                    {obdMetrics.connectionStatusText}
+                  </p>
+                )}
+
+                {/* Lukemat */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-emerald-200/60 dark:border-emerald-800/60 text-[11px]">
+                  <div className="bg-white/60 dark:bg-slate-900/50 p-2 rounded-lg border border-emerald-200/50 dark:border-emerald-800/40">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Kierrosluku</span>
+                    <strong className="text-sm text-slate-900 dark:text-white">{obdMetrics.rpm} <span className="text-[10px] font-normal text-slate-500">rpm</span></strong>
+                  </div>
+                  <div className="bg-white/60 dark:bg-slate-900/50 p-2 rounded-lg border border-emerald-200/50 dark:border-emerald-800/40">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Polttoainevirtaus</span>
+                    <strong className="text-sm text-slate-900 dark:text-white">{obdMetrics.fuelRateLitersPerHour} <span className="text-[10px] font-normal text-slate-500">L/h</span></strong>
+                  </div>
+                  <div className="bg-white/60 dark:bg-slate-900/50 p-2 rounded-lg border border-emerald-200/50 dark:border-emerald-800/40">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Keskikulutus</span>
+                    <strong className="text-sm text-slate-900 dark:text-white">{obdMetrics.averageConsumptionL100Km > 0 ? obdMetrics.averageConsumptionL100Km : '—'} <span className="text-[10px] font-normal text-slate-500">l/100km</span></strong>
+                  </div>
+                  <div className="bg-white/60 dark:bg-slate-900/50 p-2 rounded-lg border border-emerald-200/50 dark:border-emerald-800/40">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Kulutettu yhteensä</span>
+                    <strong className="text-sm text-slate-900 dark:text-white">{obdMetrics.totalFuelUsedLiters} <span className="text-[10px] font-normal text-slate-500">L</span></strong>
+                  </div>
                 </div>
+
+                {obdMetrics.rpm === 0 && !obdMetrics.isSimulated && (
+                  <p className="text-[10.5px] text-amber-700 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-950/40 p-2 rounded-lg border border-amber-200 dark:border-amber-800 leading-snug">
+                    💡 <strong>Vinkki:</strong> Jos kierrosluku pysyy nollassa, käännä auton virta-avain II-asentoon (sytytysvirta päälle) tai käynnistä moottori. Auton moottorinohjain (ECU) vastaa vain virtojen ollessa päällä.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -535,7 +563,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <div className="p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/50 flex items-start space-x-3 text-xs text-indigo-900 dark:text-indigo-200">
             <Activity className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
             <div className="leading-relaxed">
-              <strong>Puhelimen liiketunnistus:</strong> Tunnistaa automaattisesti äkkijarrutukset (yli 3.8 m/s²), vauhdikkaat mutkat (yli 3.9 m/s²) sekä moottorin sammumiset ajon aikana. Tulokset analysoidaan ja kootaan jokaisen ajon päätteeksi pedagogiseksi sanalliseksi raportiksi.
+              <strong>Puhelimen liiketunnistus (2 s keskiarvo):</strong> Suodattaa tien kuopat, töyssyt ja telineen tärinän laskemalla kiihtyvyysanturin <strong>2 sekunnin liukuvaa keskiarvoa</strong>. Tunnistaa luotettavasti vain todelliset äkkijarrutukset, vauhdikkaat mutkat sekä moottorin sammumiset.
             </div>
           </div>
         </div>

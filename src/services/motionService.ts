@@ -12,27 +12,41 @@ const DEFAULT_CONFIG: MotionConfig = {
   soundEnabled: true,
 };
 
-// Kynnysarvot m/s² eri herkkyystasoilla
+// Kynnysarvot m/s² eri herkkyystasoilla (laskettuna 2 sekunnin liukuvana keskiarvona)
 const THRESHOLDS = {
   low: {
-    hardBrake: 4.2,      // vaatii todella kovan jarrutuksen
-    rapidAccel: 3.8,
-    hardTurn: 4.2,
-    stallJerk: 6.0,
+    hardBrake: 3.6,      // vaatii voimakkaan 2 sekunnin jatkuvan jarrutuksen (~26 km/h pudotus)
+    rapidAccel: 3.2,
+    hardTurn: 3.6,
+    stallJerk: 5.5,
   },
   normal: {
-    hardBrake: 3.3,      // ~0.34 G, normaali äkkijarrutus
-    rapidAccel: 3.0,
-    hardTurn: 3.3,
-    stallJerk: 4.8,
+    hardBrake: 2.8,      // ~0.29 G jatkuvana 2 sekunnin ajan (~20 km/h pudotus)
+    rapidAccel: 2.5,
+    hardTurn: 2.8,
+    stallJerk: 4.5,
   },
   high: {
-    hardBrake: 2.6,      // herkempi havainnointi harjoitteluvaiheessa
-    rapidAccel: 2.4,
-    hardTurn: 2.6,
-    stallJerk: 3.8,
+    hardBrake: 2.2,      // herkempi havainnointi opetusvaiheessa (~16 km/h pudotus 2s aikana)
+    rapidAccel: 2.0,
+    hardTurn: 2.2,
+    stallJerk: 3.5,
   },
 };
+
+interface MotionSample {
+  timestamp: number;
+  ax: number;
+  ay: number;
+  az: number;
+  planar: number;
+  total: number;
+}
+
+interface GpsSample {
+  timestamp: number;
+  speedKmH: number;
+}
 
 class MotionDetectionManager {
   private isRunning = false;
@@ -43,7 +57,18 @@ class MotionDetectionManager {
   private lastTurnTime = 0;
   private lastStallTime = 0;
 
-  private lastGpsPoint: GeoPoint | null = null;
+  // 2.0 sekunnin liukuva keskiarvoikkuna kiihtyvyysanturille
+  private readonly WINDOW_DURATION_MS = 2000;
+  private readonly MIN_SAMPLES_REQUIRED = 8;
+  private readonly MIN_TIME_SPAN_MS = 1500;
+  private motionSamples: MotionSample[] = [];
+
+  // Painovoiman suodatus (low-pass gravity vector) jos event.acceleration ei poista painovoimaa
+  private gravity = { x: 0, y: 0, z: 9.81 };
+  private gravityInitialized = false;
+
+  // GPS-nopeushistoria 2 sekunnin keskiarvoon
+  private gpsSamples: GpsSample[] = [];
   private currentGpsPoint: GeoPoint | null = null;
   private currentSpeedKmH = 0;
 
@@ -77,6 +102,9 @@ class MotionDetectionManager {
   public async startTracking(): Promise<boolean> {
     if (this.isRunning) return true;
     this.events = [];
+    this.motionSamples = [];
+    this.gpsSamples = [];
+    this.gravityInitialized = false;
     this.isRunning = true;
     this.lastBrakeTime = 0;
     this.lastAccelTime = 0;
@@ -114,54 +142,69 @@ class MotionDetectionManager {
       window.removeEventListener('devicemotion', this.motionListener);
       this.motionListener = null;
     }
+    this.motionSamples = [];
+    this.gpsSamples = [];
     return this.getDrivingBehaviorSummary();
   }
 
+  /**
+   * GPS-nopeuspäivitykset: käyttää 2 sekunnin aikaikkunaa todellisen kiihtyvyyden määrittämiseen
+   */
   public updateGpsPosition(point: GeoPoint) {
     if (!this.isRunning) return;
 
-    this.lastGpsPoint = this.currentGpsPoint;
     this.currentGpsPoint = point;
-    const prevSpeed = this.currentSpeedKmH;
     this.currentSpeedKmH = point.speed || 0;
 
-    if (!this.lastGpsPoint) return;
+    const now = point.timestamp || Date.now();
+    this.gpsSamples.push({ timestamp: now, speedKmH: this.currentSpeedKmH });
 
-    const timeDeltaSec = (point.timestamp - this.lastGpsPoint.timestamp) / 1000;
-    if (timeDeltaSec <= 0 || timeDeltaSec > 4) return;
+    // Pidetään vain viimeisen 2.5 sekunnin GPS-näytteet
+    const cutoff = now - 2500;
+    while (this.gpsSamples.length > 0 && this.gpsSamples[0].timestamp < cutoff) {
+      this.gpsSamples.shift();
+    }
 
-    // Lasketaan GPS-kiihtyvyys (m/s²)
-    const speedDeltaMs = ((this.currentSpeedKmH - prevSpeed) * 1000) / 3600;
+    if (this.gpsSamples.length < 2) return;
+
+    const oldest = this.gpsSamples[0];
+    const newest = this.gpsSamples[this.gpsSamples.length - 1];
+    const timeDeltaSec = (newest.timestamp - oldest.timestamp) / 1000;
+
+    // Vaaditaan vähintään 1.5 sekunnin aikaero luotettavaan 2 sekunnin GPS-kiihtyvyyteen
+    if (timeDeltaSec < 1.5 || timeDeltaSec > 4) return;
+
+    const speedDeltaMs = ((newest.speedKmH - oldest.speedKmH) * 1000) / 3600;
     const accelMs2 = speedDeltaMs / timeDeltaSec;
 
     const thresholds = THRESHOLDS[this.config.sensitivity];
 
-    // GPS-pohjainen varajärjestelmä äkkijarrutuksille
-    // Esim. nopeus putoaa 50 km/h -> 20 km/h 2 sekunnissa (accel = -4.1 m/s²)
-    if (accelMs2 < -thresholds.hardBrake && prevSpeed > 20) {
+    // GPS-pohjainen varajärjestelmä äkkijarrutuksille 2 sekunnin ajalta
+    if (accelMs2 < -thresholds.hardBrake && oldest.speedKmH > 22) {
       this.triggerEvent({
         type: 'hard_brake',
-        severity: Math.abs(accelMs2) > 5.0 ? 'severe' : 'moderate',
-        speedKmH: prevSpeed,
+        severity: Math.abs(accelMs2) > 4.5 ? 'severe' : 'moderate',
+        speedKmH: oldest.speedKmH,
         value: Math.round(Math.abs(accelMs2) * 10) / 10,
-        description: `Äkkijarrutus nopeudesta ${Math.round(prevSpeed)} km/h (hidastuvuus ${Math.abs(accelMs2).toFixed(1)} m/s²)`,
+        description: `Äkkijarrutus nopeudesta ${Math.round(oldest.speedKmH)} km/h (2 s hidastuvuus ${Math.abs(accelMs2).toFixed(1)} m/s²)`,
       });
     }
 
-    // GPS-pohjainen voimakas kiihdytys
-    if (accelMs2 > thresholds.rapidAccel && this.currentSpeedKmH > 15) {
+    // GPS-pohjainen voimakas kiihdytys 2 sekunnin ajalta
+    if (accelMs2 > thresholds.rapidAccel && newest.speedKmH > 18) {
       this.triggerEvent({
         type: 'rapid_accel',
-        severity: accelMs2 > 4.5 ? 'severe' : 'moderate',
-        speedKmH: this.currentSpeedKmH,
+        severity: accelMs2 > 4.0 ? 'severe' : 'moderate',
+        speedKmH: newest.speedKmH,
         value: Math.round(accelMs2 * 10) / 10,
-        description: `Voimakas kiihdytys (${accelMs2.toFixed(1)} m/s²)`,
+        description: `Voimakas kiihdytys (2 s kiihtyvyys ${accelMs2.toFixed(1)} m/s²)`,
       });
     }
   }
 
   /**
-   * Käsittelee puhelimen sisäisen kiihtyvyysanturin datan
+   * Käsittelee puhelimen sisäisen kiihtyvyysanturin datan laskemalla 2 sekunnin liukuvaa keskiarvoa.
+   * Tämä suodattaa pois tien kuopat, töyssyt ja telineen tärinät.
    */
   private handleDeviceMotion(event: DeviceMotionEvent) {
     if (!this.isRunning) return;
@@ -169,42 +212,59 @@ class MotionDetectionManager {
     const now = Date.now();
     const thresholds = THRESHOLDS[this.config.sensitivity];
 
-    // Otetaan kiihtyvyys ilman painovoimaa jos saatavilla, muuten mukaan lukien painovoima
-    const accel = event.acceleration || event.accelerationIncludingGravity;
-    if (!accel) return;
+    let ax = 0;
+    let ay = 0;
+    let az = 0;
 
-    const ax = accel.x || 0;
-    const ay = accel.y || 0;
-    const az = accel.z || 0;
+    // Ensisijaisesti käytetään lineaarista kiihtyvyyttä (ilman painovoimaa)
+    const linAccel = event.acceleration;
+    const rawAccel = event.accelerationIncludingGravity;
 
-    // Kokonaisvoima kiihtyvyydelle tasossa
+    if (linAccel && (linAccel.x !== null || linAccel.y !== null || linAccel.z !== null)) {
+      ax = linAccel.x || 0;
+      ay = linAccel.y || 0;
+      az = linAccel.z || 0;
+    } else if (rawAccel && (rawAccel.x !== null || rawAccel.y !== null || rawAccel.z !== null)) {
+      const rx = rawAccel.x || 0;
+      const ry = rawAccel.y || 0;
+      const rz = rawAccel.z || 0;
+
+      // Alustetaan tai päivitetään painovoimavektori (low-pass suodatus)
+      if (!this.gravityInitialized) {
+        this.gravity = { x: rx, y: ry, z: rz };
+        this.gravityInitialized = true;
+      } else {
+        const alpha = 0.85;
+        this.gravity.x = alpha * this.gravity.x + (1 - alpha) * rx;
+        this.gravity.y = alpha * this.gravity.y + (1 - alpha) * ry;
+        this.gravity.z = alpha * this.gravity.z + (1 - alpha) * rz;
+      }
+
+      // Poistetaan staattinen painovoimakomponentti
+      ax = rx - this.gravity.x;
+      ay = ry - this.gravity.y;
+      az = rz - this.gravity.z;
+    } else {
+      return;
+    }
+
     const planarMagnitude = Math.sqrt(ax * ax + ay * ay);
     const totalMagnitude = Math.sqrt(ax * ax + ay * ay + az * az);
 
-    // 1. Äkkijarrutus kiihtyvyysanturilla (kun auto liikkuu eteenpäin)
-    if (this.currentSpeedKmH > 18 && (ay < -thresholds.hardBrake || planarMagnitude > thresholds.hardBrake * 1.2)) {
-      if (now - this.lastBrakeTime > 4000) {
-        this.triggerEvent({
-          type: 'hard_brake',
-          severity: planarMagnitude > 5.2 ? 'severe' : 'moderate',
-          speedKmH: this.currentSpeedKmH,
-          value: Math.round(planarMagnitude * 10) / 10,
-          description: `Voimakas jarrutus (${planarMagnitude.toFixed(1)} m/s²) nopeudessa ${Math.round(this.currentSpeedKmH)} km/h`,
-        });
-      }
-    }
+    // Lisätään näyte 2 sekunnin liukuvaan puskuriin
+    this.motionSamples.push({
+      timestamp: now,
+      ax,
+      ay,
+      az,
+      planar: planarMagnitude,
+      total: totalMagnitude,
+    });
 
-    // 2. Vauhdikas mutka (sivuttaisvoima kun auto liikkuu mutkaan)
-    if (this.currentSpeedKmH > 22 && Math.abs(ax) > thresholds.hardTurn) {
-      if (now - this.lastTurnTime > 4000) {
-        this.triggerEvent({
-          type: 'hard_turn',
-          severity: Math.abs(ax) > 5.0 ? 'severe' : 'moderate',
-          speedKmH: this.currentSpeedKmH,
-          value: Math.round(Math.abs(ax) * 10) / 10,
-          description: `Vauhdikas mutka (${Math.abs(ax).toFixed(1)} m/s²) nopeudessa ${Math.round(this.currentSpeedKmH)} km/h`,
-        });
-      }
+    // Poistetaan vanhemmat kuin 2000 ms (2 sekuntia) näytteet
+    const cutoff = now - this.WINDOW_DURATION_MS;
+    while (this.motionSamples.length > 0 && this.motionSamples[0].timestamp < cutoff) {
+      this.motionSamples.shift();
     }
 
     // 3. Moottorin sammuminen (kytkimen lipsahdus pysähdyksissä / liikkeellelähdössä)
@@ -217,6 +277,62 @@ class MotionDetectionManager {
           speedKmH: this.currentSpeedKmH,
           value: Math.round(totalMagnitude * 10) / 10,
           description: 'Moottorin sammuminen tai nykäisevä liikkeellelähtö',
+        });
+        return;
+      }
+    }
+
+    // Varmistetaan että puskurissa on tarpeeksi dataa 2 sekunnin keskiarvoon
+    const oldest = this.motionSamples[0];
+    const newest = this.motionSamples[this.motionSamples.length - 1];
+    const timeSpan = newest.timestamp - oldest.timestamp;
+
+    if (this.motionSamples.length < this.MIN_SAMPLES_REQUIRED || timeSpan < this.MIN_TIME_SPAN_MS) {
+      return;
+    }
+
+    // Lasketaan 2 sekunnin keskiarvo
+    let sumAx = 0;
+    let sumAy = 0;
+    let sumPlanar = 0;
+
+    for (const sample of this.motionSamples) {
+      sumAx += sample.ax;
+      sumAy += sample.ay;
+      sumPlanar += sample.planar;
+    }
+
+    const count = this.motionSamples.length;
+    const avgAx = sumAx / count;
+    const avgAy = sumAy / count;
+    const avgPlanar = sumPlanar / count;
+
+    // 1. Äkkijarrutus 2 sekunnin liukuvalla keskiarvolla
+    // Yksittäinen kuoppa tai tärähdys ei riitä, vaan hidastuvuuden pitää säilyä korkeana koko 2 sekunnin ajan
+    if (this.currentSpeedKmH > 18 && (avgAy < -thresholds.hardBrake || avgPlanar > thresholds.hardBrake)) {
+      if (now - this.lastBrakeTime > 4000) {
+        const brakeVal = Math.max(Math.abs(avgAy), avgPlanar);
+        this.triggerEvent({
+          type: 'hard_brake',
+          severity: brakeVal > 4.2 ? 'severe' : 'moderate',
+          speedKmH: this.currentSpeedKmH,
+          value: Math.round(brakeVal * 10) / 10,
+          description: `Voimakas jarrutus (2 s keskiarvo ${brakeVal.toFixed(1)} m/s²) nopeudessa ${Math.round(this.currentSpeedKmH)} km/h`,
+        });
+      }
+    }
+
+    // 2. Vauhdikas mutka 2 sekunnin liukuvalla keskiarvolla
+    // Vaatii todellisen kaartamisen 2 sekunnin ajan
+    if (this.currentSpeedKmH > 22 && (Math.abs(avgAx) > thresholds.hardTurn || avgPlanar > thresholds.hardTurn * 1.15)) {
+      if (now - this.lastTurnTime > 4000) {
+        const turnVal = Math.max(Math.abs(avgAx), avgPlanar);
+        this.triggerEvent({
+          type: 'hard_turn',
+          severity: turnVal > 4.2 ? 'severe' : 'moderate',
+          speedKmH: this.currentSpeedKmH,
+          value: Math.round(turnVal * 10) / 10,
+          description: `Vauhdikas mutka (2 s keskiarvo ${turnVal.toFixed(1)} m/s²) nopeudessa ${Math.round(this.currentSpeedKmH)} km/h`,
         });
       }
     }
